@@ -46,6 +46,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     updateStatusItem()
     model.start()
+
+    // The status item is not positioned at first paint, so its frame is reported once the
+    // menu bar has placed it. Used to crop a capture to the icon.
+    if isTracing {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+        guard let frame = self?.statusItem.button?.window?.frame else { return }
+        print(
+          "statusItemFrame=\(Int(frame.minX)),\(Int(frame.minY)),"
+            + "\(Int(frame.width)),\(Int(frame.height))")
+        fflush(stdout)
+      }
+    }
   }
 
   private func updateStatusItem() {
@@ -80,7 +92,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard trace != lastTrace else { return }
     lastTrace = trace
     let stamp = Date().formatted(date: .omitted, time: .standard)
-    print("[\(stamp)] icon=\(trace)")
+    // Screen frame lets a capture be cropped to the icon without hunting for it.
+    let frame = button.window?.frame ?? .zero
+    print(
+      "[\(stamp)] icon=\(trace) frame=\(Int(frame.origin.x)),\(Int(frame.origin.y)),"
+        + "\(Int(frame.width)),\(Int(frame.height))")
     fflush(stdout)
   }
 

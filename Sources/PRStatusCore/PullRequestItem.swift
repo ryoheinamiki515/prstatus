@@ -82,6 +82,15 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
     "\(repository) #\(number)"
   }
 
+  /// Same PR, different clock start. Used to drive the aging behaviour from a fixture.
+  public func withWaitingSince(_ date: Date) -> PullRequestItem {
+    PullRequestItem(
+      id: id, number: number, title: title, url: url, repository: repository,
+      authorLogin: authorLogin, authorAvatarURL: authorAvatarURL, isDraft: isDraft,
+      additions: additions, deletions: deletions, changedFiles: changedFiles,
+      waitingSince: date)
+  }
+
   public func age(now: Date) -> TimeInterval {
     max(0, now.timeIntervalSince(waitingSince))
   }

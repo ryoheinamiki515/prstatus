@@ -12,7 +12,16 @@ enum RenderProbe {
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
     let fixture = URL(fileURLWithPath: "Fixtures/response.json")
-    let fixtureItems = (try? GitHubClient.decode(Data(contentsOf: fixture)).items) ?? []
+    let decoded = (try? GitHubClient.decode(Data(contentsOf: fixture)).items) ?? []
+    // The fixture's timestamps are fixed, so with real time they all read as urgent. Ages
+    // are spread across the thresholds here so a documentation shot shows every colour.
+    let spread: [TimeInterval] = [
+      12 * 60, 40 * 60, 75 * 60, 150 * 60, 4 * 3600, 3 * 86400 + 4 * 3600,
+    ]
+    let now = Date()
+    let fixtureItems = decoded.enumerated().map { index, item in
+      item.withWaitingSince(now.addingTimeInterval(-spread[index % spread.count]))
+    }
 
     for appearance in [NSAppearance.Name.aqua, .darkAqua] {
       let suffix = appearance == .aqua ? "light" : "dark"

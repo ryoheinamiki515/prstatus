@@ -22,13 +22,6 @@ enum ItemSource {
     -> [PullRequestItem]
   {
     let data = try Data(contentsOf: URL(fileURLWithPath: path))
-    return try GitHubClient.decode(data).items.map { item in
-      PullRequestItem(
-        id: item.id, number: item.number, title: item.title, url: item.url,
-        repository: item.repository, authorLogin: item.authorLogin,
-        authorAvatarURL: item.authorAvatarURL, isDraft: item.isDraft,
-        additions: item.additions, deletions: item.deletions,
-        changedFiles: item.changedFiles, waitingSince: anchor)
-    }
+    return try GitHubClient.decode(data).items.map { $0.withWaitingSince(anchor) }
   }
 }
