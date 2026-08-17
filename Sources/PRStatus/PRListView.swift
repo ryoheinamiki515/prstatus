@@ -66,21 +66,51 @@ struct PRListView: View {
       }
     case .failed(let error):
       errorView(error)
-    case .loaded(let items, _) where items.isEmpty:
-      centered {
-        Image(systemName: "checkmark.circle")
-          .font(.system(size: 22, weight: .light))
-          .foregroundStyle(.secondary)
-        Text("Nothing waiting on you")
-          .font(.system(size: 12, weight: .medium))
-        Text("No open PRs have requested your review.")
-          .font(.system(size: 11))
-          .foregroundStyle(.secondary)
-          .multilineTextAlignment(.center)
+    case .loaded(let items, let at, let refreshError):
+      // The banner wraps both bodies: a queue known to be empty is knowledge worth
+      // keeping when a refresh fails, and it needs the same "this is not current" mark.
+      VStack(spacing: 0) {
+        if let refreshError {
+          staleBanner(refreshError, since: at)
+        }
+        if items.isEmpty { emptyState } else { list }
       }
-    case .loaded:
-      list
     }
+  }
+
+  private var emptyState: some View {
+    centered {
+      Image(systemName: "checkmark.circle")
+        .font(.system(size: 22, weight: .light))
+        .foregroundStyle(.secondary)
+      Text("Nothing waiting on you")
+        .font(.system(size: 12, weight: .medium))
+      Text("No open PRs have requested your review.")
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+  }
+
+  /// Rows are still worth showing when a refresh fails; the banner says so rather than
+  /// letting them pass for current.
+  private func staleBanner(_ error: GitHubClientError, since: Date) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: "exclamationmark.circle")
+        .font(.system(size: 10, weight: .semibold))
+      Text(
+        "\(error.title) — showing \(formatAsOfTime(since))"
+      )
+      .font(.system(size: 10))
+      Spacer(minLength: 0)
+      Button("Retry", action: model.refresh)
+        .buttonStyle(.plain)
+        .font(.system(size: 10, weight: .medium))
+    }
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 5)
+    .background(Color.orange.opacity(0.12))
   }
 
   private var list: some View {
@@ -133,10 +163,19 @@ struct PRListView: View {
 
   private var footer: some View {
     HStack(spacing: 10) {
-      LaunchAtLoginToggle()
+      Toggle(
+        "Open at Login",
+        isOn: Binding(
+          get: { model.launchAtLoginEnabled },
+          set: { model.setLaunchAtLogin($0) })
+      )
+      .toggleStyle(.checkbox)
+      .font(.system(size: 11))
       Spacer()
-      if case .loaded(_, let at) = model.state {
-        Text("Updated \(at.formatted(date: .omitted, time: .shortened))")
+      // Suppressed while stale: the banner already states the same time, and two
+      // timestamps saying different things is worse than one.
+      if case .loaded(_, let at, .none) = model.state {
+        Text("Updated \(formatAsOfTime(at))")
           .font(.system(size: 10))
           .foregroundStyle(.tertiary)
       }
@@ -147,21 +186,6 @@ struct PRListView: View {
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 8)
-  }
-}
-
-private struct LaunchAtLoginToggle: View {
-  @State private var enabled = LaunchAtLogin.isEnabled
-
-  var body: some View {
-    Toggle("Open at Login", isOn: $enabled)
-      .toggleStyle(.checkbox)
-      .font(.system(size: 11))
-      .onChange(of: enabled) { _, newValue in
-        LaunchAtLogin.setEnabled(newValue)
-        // Re-read rather than trusting the write: registration can be refused.
-        enabled = LaunchAtLogin.isEnabled
-      }
   }
 }
 

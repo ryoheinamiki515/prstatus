@@ -1,5 +1,11 @@
 import Foundation
 
+/// Clock label for "as of" timestamps. Shared so the popover banner, the footer and the
+/// menu bar tooltip cannot describe the same instant three different ways.
+public func formatAsOfTime(_ date: Date) -> String {
+  date.formatted(date: .omitted, time: .shortened)
+}
+
 /// Compact "how long has this sat there" label for the popover rows: `4m`, `2h 14m`,
 /// `3d 4h`. Kept here rather than in the view so the rounding edges are testable.
 public func formatWaitingDuration(_ interval: TimeInterval) -> String {

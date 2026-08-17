@@ -3,7 +3,7 @@ import Foundation
 /// How badly a single pull request is overdue. A PR that exists is always at one of
 /// these levels; "nothing is waiting" is the *absence* of items, represented as
 /// `Urgency?` == nil at the aggregate level rather than a fourth case here.
-public enum Urgency: Int, Comparable, Sendable, CaseIterable {
+public enum Urgency: Int, Comparable, Sendable {
   case fresh = 0
   case stale = 1
   case urgent = 2
@@ -82,7 +82,7 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
     "\(repository) #\(number)"
   }
 
-  /// Same PR, different clock start. Used to drive the aging behaviour from a fixture.
+  /// Same PR, different clock start.
   public func withWaitingSince(_ date: Date) -> PullRequestItem {
     PullRequestItem(
       id: id, number: number, title: title, url: url, repository: repository,

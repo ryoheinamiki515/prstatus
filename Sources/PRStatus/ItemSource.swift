@@ -1,9 +1,8 @@
 import Foundation
 import PRStatusCore
 
-/// Where the popover's rows come from. The live path talks to GitHub; the fixture path
-/// exists because the aging behaviour has to be observable on demand, and that cannot be
-/// arranged by waiting for someone to request a review at a convenient moment.
+/// Where the popover's rows come from: GitHub, or a captured response whose clocks start
+/// at launch so the aging behaviour runs on demand.
 enum ItemSource {
   static func resolve(
     _ env: [String: String] = ProcessInfo.processInfo.environment

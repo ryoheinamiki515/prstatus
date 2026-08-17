@@ -9,10 +9,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var statusItem: NSStatusItem!
   private var popover: NSPopover!
   private var cancellable: AnyCancellable?
-  /// PRSTATUS_TRACE=1 prints each icon state change, which is how the colour transitions
-  /// get verified on a machine where screen capture is unavailable.
+  /// PRSTATUS_TRACE=1 prints each icon state change and the status item's screen frame.
   private let isTracing = ProcessInfo.processInfo.environment["PRSTATUS_TRACE"] == "1"
   private var lastTrace = ""
+  private var lastDrawn: (StatusAppearance, Int)?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.accessory)
@@ -62,32 +62,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private func updateStatusItem() {
     guard let button = statusItem.button else { return }
-    let urgency = model.urgency
-    button.image = StatusIcon.image(for: urgency)
+    let appearance = model.appearance
     let count = model.state.items.count
-    button.title = count > 0 ? " \(count)" : ""
 
-    if case .failed(let error) = model.state {
-      button.toolTip = "PRStatus — \(error.title)"
-    } else if count == 0 {
-      button.toolTip = "PRStatus — nothing waiting on you"
-    } else {
-      let oldest = model.items.first.map { formatWaitingDuration($0.age(now: model.now)) } ?? ""
-      button.toolTip =
-        "PRStatus — \(count) waiting on your review, oldest \(oldest)"
+    // `now` republishes every tick, so most calls here change nothing. Rebuilding the
+    // NSImage anyway would dirty the status item several times a minute for no reason.
+    if lastDrawn.map({ $0 != appearance || $1 != count }) ?? true {
+      lastDrawn = (appearance, count)
+      button.image = StatusIcon.image(for: appearance)
+      button.title = count > 0 ? " \(count)" : ""
     }
+    // Not guarded: the tooltip carries a duration that advances between redraws.
+    button.toolTip = "PRStatus — \(tooltipDetail)"
 
     guard isTracing else { return }
-    let name = urgency.map { "\($0)" } ?? "empty"
     let stateName: String
     switch model.state {
     case .never: stateName = "never"
     case .loading: stateName = "loading"
-    case .loaded: stateName = "loaded"
+    case .loaded(_, _, let refreshError):
+      stateName = refreshError.map { "loaded(stale: \($0.title))" } ?? "loaded"
     case .failed(let error): stateName = "failed(\(error.title): \(error.hint))"
     }
     let trace =
-      "\(name) count=\(count) state=\(stateName) image=\(button.image != nil) "
+      "\(appearance) count=\(count) state=\(stateName) image=\(button.image != nil) "
       + "title=\"\(button.title)\""
     guard trace != lastTrace else { return }
     lastTrace = trace
@@ -98,6 +96,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       "[\(stamp)] icon=\(trace) frame=\(Int(frame.origin.x)),\(Int(frame.origin.y)),"
         + "\(Int(frame.width)),\(Int(frame.height))")
     fflush(stdout)
+  }
+
+  /// Switches on the state rather than the appearance: the appearance is the icon's
+  /// decision and deliberately drops the error and the timestamp this needs.
+  private var tooltipDetail: String {
+    switch model.state {
+    case .never, .loading:
+      return "checking GitHub…"
+    case .failed(let error):
+      return error.title
+    case .loaded(let items, let at, let refreshError):
+      let stale = refreshError.map { "\($0.title.lowercased()) — showing \(formatAsOfTime(at))" }
+      guard let oldest = items.first else {
+        return stale ?? "nothing waiting on you"
+      }
+      let summary =
+        "\(items.count) waiting on your review, "
+        + "oldest \(formatWaitingDuration(oldest.age(now: model.now)))"
+      return stale.map { "\(summary) (\($0))" } ?? summary
+    }
   }
 
   @objc private func handleWake() {
@@ -111,6 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return
     }
     model.refresh()
+    model.syncLaunchAtLogin()
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     // Without this the popover opens behind the frontmost app and swallows the first click.
     popover.contentViewController?.view.window?.makeKey()

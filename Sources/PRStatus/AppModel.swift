@@ -1,29 +1,18 @@
 import Foundation
 import PRStatusCore
 
-/// The four states are separate cases rather than an items array plus flags, so the view
-/// cannot accidentally render "no data yet" and "nothing waiting" the same way.
-enum LoadState {
-  case never
-  case loading
-  case loaded(items: [PullRequestItem], at: Date)
-  case failed(GitHubClientError)
-
-  var items: [PullRequestItem] {
-    if case .loaded(let items, _) = self { return items }
-    return []
-  }
-}
-
 @MainActor
 final class AppModel: ObservableObject {
   @Published private(set) var state: LoadState = .never
-  /// Distinct from `.loading`: a background refresh while rows are already on screen
-  /// must not blank the list out.
+  /// Distinct from `.loading`: a background refresh while rows are already on screen must
+  /// not blank the list out.
   @Published private(set) var isRefreshing = false
   /// Republished on every tick so both the relative times and the icon colour advance
   /// without needing a network round trip.
   @Published private(set) var now = Date()
+  /// Populated by `syncLaunchAtLogin` before the popover is shown, so no
+  /// ServiceManagement query runs on the launch path.
+  @Published private(set) var launchAtLoginEnabled = false
 
   let thresholds: UrgencyThresholds
   /// Injected so the aging behaviour can be driven from a fixture instead of the network;
@@ -32,17 +21,15 @@ final class AppModel: ObservableObject {
   private var timer: Timer?
   private var lastFetch: Date?
 
-  /// Fetching is rate-limit friendly at once a minute, but the clock has to be re-read
-  /// far more often than that when thresholds are seconds apart (the aging test).
+  /// Fetching is rate-limit friendly at once a minute, but the clock has to be re-read far
+  /// more often than that when thresholds are seconds apart (the aging test).
   private let fetchInterval: TimeInterval = 60
   private var tickInterval: TimeInterval { max(1, min(15, thresholds.stale / 3)) }
 
-  var items: [PullRequestItem] {
-    state.items.sorted { $0.waitingSince < $1.waitingSince }
-  }
+  var items: [PullRequestItem] { state.items }
 
-  var urgency: Urgency? {
-    worstUrgency(of: state.items, now: now, thresholds: thresholds)
+  var appearance: StatusAppearance {
+    statusAppearance(for: state, now: now, thresholds: thresholds)
   }
 
   init(
@@ -79,6 +66,18 @@ final class AppModel: ObservableObject {
     refresh()
   }
 
+  /// Re-read rather than cached, so the checkbox reflects changes made in System Settings.
+  func syncLaunchAtLogin() {
+    let enabled = LaunchAtLogin.isEnabled
+    guard enabled != launchAtLoginEnabled else { return }
+    launchAtLoginEnabled = enabled
+  }
+
+  func setLaunchAtLogin(_ enabled: Bool) {
+    LaunchAtLogin.setEnabled(enabled)
+    syncLaunchAtLogin()
+  }
+
   func refresh() {
     guard !isRefreshing else { return }
     isRefreshing = true
@@ -86,19 +85,18 @@ final class AppModel: ObservableObject {
 
     Task { @MainActor in
       defer { isRefreshing = false }
+      let result: Result<[PullRequestItem], GitHubClientError>
       do {
-        let items = try await loadItems()
-        let fetchedAt = Date()
-        lastFetch = fetchedAt
-        now = fetchedAt
-        state = .loaded(items: items, at: fetchedAt)
+        result = .success(try await loadItems())
       } catch let error as GitHubClientError {
-        lastFetch = Date()
-        state = .failed(error)
+        result = .failure(error)
       } catch {
-        lastFetch = Date()
-        state = .failed(.network(error.localizedDescription))
+        result = .failure(.network(error.localizedDescription))
       }
+      let completedAt = Date()
+      lastFetch = completedAt
+      now = completedAt
+      state = nextState(after: state, result: result, now: completedAt)
     }
   }
 }

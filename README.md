@@ -11,13 +11,20 @@ review queue ages.
 
 ## The circle
 
-| | | | |
-|:--:|:--:|:--:|:--:|
-| <img src="docs/state-hollow.png" width="32" alt="Hollow circle"> | <img src="docs/state-green.png" width="50" alt="Green filled circle with the number 6"> | <img src="docs/state-yellow.png" width="50" alt="Yellow filled circle with the number 6"> | <img src="docs/state-red.png" width="50" alt="Red filled circle with the number 6"> |
-| Nothing waiting | Waiting | Over 1 hour | Over 3 hours |
+| | | | | |
+|:--:|:--:|:--:|:--:|:--:|
+| <img src="docs/state-idle.png" width="32" alt="Hollow circle"> | <img src="docs/state-green.png" width="50" alt="Green filled circle with the number 6"> | <img src="docs/state-yellow.png" width="50" alt="Yellow filled circle with the number 6"> | <img src="docs/state-red.png" width="50" alt="Red filled circle with the number 6"> | <img src="docs/state-unavailable.png" width="32" alt="Circle containing an exclamation mark"> |
+| Nothing waiting | Waiting | Over 1 hour | Over 3 hours | Can't reach GitHub |
 
 The colour follows the **worst** item in the queue; the number is how many are waiting.
-The hollow state is a template image, so it adapts to a light or dark menu bar on its own.
+Everything except the filled states is a template image, so it adapts to a light or dark
+menu bar on its own. A dashed circle appears briefly at launch, before the first fetch
+returns.
+
+That last state earns its place: **not knowing your queue must never be drawn as an empty
+queue.** A hollow "all clear" circle while GitHub is unreachable is a silent failure that
+looks like good news, so unreachable, not-yet-loaded and genuinely-empty are three
+different glyphs.
 
 Ages advance on their own, without needing a network round trip — the clock is re-read far
 more often than GitHub is polled:
@@ -59,12 +66,20 @@ lid closed for four hours should not reveal a stale green circle.
 | <img src="docs/empty.png" width="330" alt="Popover showing that nothing is waiting on you"> | <img src="docs/error.png" width="330" alt="Popover showing that the GitHub CLI could not be found, with a Try Again button"> |
 | Queue empty | Each failure names its own remedy |
 
-Pending, loading, empty and failed are four separate states rather than one empty list, so
-a slow request never flashes a false "nothing waiting" and a real error is never silently
-swallowed. The popover follows your system appearance:
+Pending, loading, empty and failed are separate states rather than one empty list, so a
+slow request never flashes a false "nothing waiting" and a real error is never silently
+swallowed.
+
+GitHub 503s intermittently, and throwing away a good queue over one blip is worse than
+showing it with a warning. So a failed *refresh* keeps whatever was already known — rows
+or a confirmed-empty queue — and marks it rather than replacing it. A full-screen error is
+reserved for having no data at all.
+
+<img src="docs/stale.png" width="380" alt="The queue with a banner reading: Can't reach GitHub — showing 2:43 PM, with a Retry button">
+
+The popover follows your system appearance:
 
 <img src="docs/popover-dark.png" width="380" alt="The same queue rendered in dark appearance">
-
 
 ## Authentication
 
@@ -125,11 +140,11 @@ swift build --product SelfTest && ./.build/debug/SelfTest
 ```
 
 `swift test` **cannot run here**: the Command Line Tools ship neither XCTest nor
-swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 70
+swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 85
 checks over threshold boundaries, the wait-time cascade, response decoding, duration
-formatting, and error presentation. It is not a framework: no fixture isolation, no
-parameterisation, and it covers `PRStatusCore` only. The AppKit and SwiftUI layer is
-checked with `PRSTATUS_RENDER`.
+formatting, menu bar appearance, fetch-outcome transitions and error presentation. It is
+not a framework: no fixture isolation, no parameterisation, and it covers `PRStatusCore`
+only. The AppKit and SwiftUI layer is checked with `PRSTATUS_RENDER`.
 
 ```
 Sources/PRStatusCore/   pure logic, no AppKit — the part SelfTest links

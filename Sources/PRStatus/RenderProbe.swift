@@ -37,6 +37,8 @@ enum RenderProbe {
       render(
         "06-single-item-\(suffix)", model: settled { Array(fixtureItems.prefix(1)) },
         appearance, directory)
+      render("07-stale-\(suffix)", model: stale(fixtureItems), appearance, directory)
+      render("08-stale-empty-\(suffix)", model: stale([]), appearance, directory)
     }
   }
 
@@ -51,15 +53,46 @@ enum RenderProbe {
     AppModel(thresholds: .standard, loadItems: load)
   }
 
-  /// Kicks off the load and lets the run loop settle so the model reaches its terminal
-  /// state before the snapshot is taken.
+  /// Waits on the model reaching a terminal state rather than on a fixed delay, so a slow
+  /// machine cannot silently render a spinner into a documentation image.
   private static func settled(
     _ load: @escaping () async throws -> [PullRequestItem]
   ) -> AppModel {
     let model = model(load)
     model.refresh()
-    RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+    guard runLoop(until: { model.state != .loading }) else {
+      fatalError("model never left .loading; refusing to render a spinner")
+    }
     return model
+  }
+
+  /// Loads once, then fails — the state a queue reaches when GitHub goes away after a
+  /// successful fetch, which is the only way to see the stale banner.
+  private static func stale(_ items: [PullRequestItem]) -> AppModel {
+    var served = false
+    let model = settled {
+      defer { served = true }
+      if served { throw GitHubClientError.network("The request timed out.") }
+      return items
+    }
+    model.refresh()
+    guard runLoop(until: { if case .loaded(_, _, .some) = model.state { true } else { false } })
+    else {
+      fatalError("model never reached a stale state")
+    }
+    return model
+  }
+
+  /// Pumps the run loop in short slices until `condition` holds, returning false on timeout.
+  private static func runLoop(
+    until condition: () -> Bool, limit: TimeInterval = 10
+  ) -> Bool {
+    let deadline = Date().addingTimeInterval(limit)
+    while !condition() {
+      if Date() >= deadline { return false }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+    return true
   }
 
   /// Draws through a real NSHostingView in a window rather than SwiftUI's ImageRenderer:
@@ -84,7 +117,7 @@ enum RenderProbe {
     window.contentView = hosting
     window.displayIfNeeded()
     hosting.layoutSubtreeIfNeeded()
-    // Lets AsyncImage placeholders and any pending layout settle before the snapshot.
+    // Layout exposes no completion signal to wait on; the snapshot is inspected by eye.
     RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
     let bounds = hosting.bounds

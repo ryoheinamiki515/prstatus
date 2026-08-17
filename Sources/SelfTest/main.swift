@@ -329,6 +329,75 @@ do {
   check("mixed node response decodes", false, "\(error)")
 }
 
+// MARK: - Menu bar appearance
+
+section("Menu bar appearance")
+let fresh = item("a", waitingSince: epoch.addingTimeInterval(-60))
+let old = item("b", waitingSince: epoch.addingTimeInterval(-4 * 3600))
+let emptyQueue = LoadState.loaded(items: [], at: epoch, refreshError: nil)
+
+func appearance(_ state: LoadState, at now: Date = epoch) -> StatusAppearance {
+  statusAppearance(for: state, now: now, thresholds: standard)
+}
+
+equal("never -> unknown", appearance(.never), .unknown)
+equal("loading -> unknown", appearance(.loading), .unknown)
+equal("failed -> unavailable", appearance(.failed(.ghNotFound)), .unavailable)
+equal("loaded empty -> idle", appearance(emptyQueue), .idle)
+equal(
+  "loaded with items -> waiting at worst urgency",
+  appearance(.loaded(items: [fresh, old], at: epoch, refreshError: nil)), .waiting(.urgent))
+
+// The bug this enum exists to prevent: a hollow "all clear" circle while GitHub is
+// unreachable is a silent failure that reads as good news.
+check(
+  "an unreachable GitHub never looks like an empty queue",
+  appearance(.failed(.network("offline"))) != appearance(emptyQueue))
+check(
+  "not-yet-loaded never looks like an empty queue",
+  appearance(.loading) != appearance(emptyQueue))
+
+section("Fetch outcome transitions")
+let loadedEarlier = LoadState.loaded(items: [fresh], at: epoch, refreshError: nil)
+let offline = GitHubClientError.network("503")
+
+equal(
+  "success replaces items and clears any prior error",
+  nextState(after: .failed(.ghNotFound), result: .success([old]), now: epoch),
+  .loaded(items: [old], at: epoch, refreshError: nil))
+equal(
+  "success orders items oldest first",
+  nextState(after: .never, result: .success([fresh, old]), now: epoch).items.map(\.id),
+  ["b", "a"])
+equal(
+  "failure with rows on screen keeps them and records the error",
+  nextState(after: loadedEarlier, result: .failure(offline), now: epoch),
+  .loaded(items: [fresh], at: epoch, refreshError: offline))
+equal(
+  "failure with no prior data surfaces the error",
+  nextState(after: .loading, result: .failure(.ghNotFound), now: epoch),
+  .failed(.ghNotFound))
+// A queue we successfully learned was empty is knowledge; losing it to one 503 would
+// swap a true "nothing waiting" for a false "cannot reach GitHub".
+equal(
+  "failure after an empty load keeps the known-empty queue and marks it stale",
+  nextState(after: emptyQueue, result: .failure(offline), now: epoch),
+  .loaded(items: [], at: epoch, refreshError: offline))
+equal(
+  "a known-empty queue still reads as idle while stale",
+  appearance(.loaded(items: [], at: epoch, refreshError: offline)), .idle)
+equal(
+  "a recovered refresh clears the stale marker",
+  nextState(
+    after: .loaded(items: [fresh], at: epoch, refreshError: offline),
+    result: .success([fresh]), now: epoch),
+  .loaded(items: [fresh], at: epoch, refreshError: nil))
+equal(
+  "kept rows still age while refreshes fail",
+  appearance(
+    nextState(after: loadedEarlier, result: .failure(offline), now: epoch),
+    at: epoch.addingTimeInterval(4 * 3600)), .waiting(.urgent))
+
 // MARK: - Error presentation
 
 // Each mode has to name a different remedy; the .ghNotFound and .network cases are

@@ -2,23 +2,20 @@ import AppKit
 import PRStatusCore
 
 enum StatusIcon {
-  /// nil urgency means nothing is waiting, drawn as a hollow template circle so the
-  /// menu bar tints it for light/dark itself. The filled states opt out of templating
-  /// because their colour *is* the signal.
-  static func image(for urgency: Urgency?) -> NSImage? {
-    let base = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+  /// Only `waiting` is drawn in colour, because colour is the signal. The other three are
+  /// template images so the menu bar tints them for light or dark itself.
+  static func image(for appearance: StatusAppearance) -> NSImage? {
+    let (symbol, label) = art(for: appearance)
+    let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+    let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
 
-    guard let urgency else {
-      let image = NSImage(systemSymbolName: "circle", accessibilityDescription: "No PRs waiting")
+    guard case .waiting(let urgency) = appearance else {
       image?.isTemplate = true
-      return image?.withSymbolConfiguration(base)
+      return image?.withSymbolConfiguration(configuration)
     }
 
-    let image = NSImage(
-      systemSymbolName: "circle.fill",
-      accessibilityDescription: accessibilityDescription(for: urgency))
     let colored = image?.withSymbolConfiguration(
-      base.applying(NSImage.SymbolConfiguration(paletteColors: [color(for: urgency)])))
+      configuration.applying(NSImage.SymbolConfiguration(paletteColors: [color(for: urgency)])))
     colored?.isTemplate = false
     return colored
   }
@@ -31,11 +28,20 @@ enum StatusIcon {
     }
   }
 
-  static func accessibilityDescription(for urgency: Urgency) -> String {
-    switch urgency {
-    case .fresh: return "PRs waiting for review"
-    case .stale: return "PRs waiting over an hour"
-    case .urgent: return "PRs waiting over three hours"
+  private static func art(for appearance: StatusAppearance) -> (symbol: String, label: String) {
+    switch appearance {
+    case .unknown:
+      return ("circle.dashed", "Checking for pull requests")
+    case .idle:
+      return ("circle", "No pull requests waiting for review")
+    case .unavailable:
+      return ("exclamationmark.circle", "Cannot reach GitHub")
+    case .waiting(.fresh):
+      return ("circle.fill", "Pull requests waiting for review")
+    case .waiting(.stale):
+      return ("circle.fill", "Pull requests waiting over an hour")
+    case .waiting(.urgent):
+      return ("circle.fill", "Pull requests waiting over three hours")
     }
   }
 }
