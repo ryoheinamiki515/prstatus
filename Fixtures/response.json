@@ -1,0 +1,222 @@
+{
+  "data": {
+    "viewer": {
+      "login": "reviewer-me"
+    },
+    "search": {
+      "issueCount": 6,
+      "nodes": [
+        {
+          "id": "PR_fixture001",
+          "number": 16135,
+          "title": "Fixture pull request 16135",
+          "url": "https://github.com/acme/service/pull/16135",
+          "isDraft": false,
+          "createdAt": "2026-08-16T21:37:35Z",
+          "additions": 2394,
+          "deletions": 156,
+          "changedFiles": 50,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev1",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-17T13:37:05Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-17T13:37:05Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev2"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-17T13:37:05Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "additions": 1803,
+          "author": {
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+            "login": "dev3"
+          },
+          "changedFiles": 38,
+          "createdAt": "2026-08-12T00:47:14Z",
+          "deletions": 165,
+          "id": "PR_fixture002",
+          "isDraft": false,
+          "number": 15916,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReadyForReviewEvent",
+                "createdAt": "2026-08-12T20:15:52Z"
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-12T20:15:52Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-12T20:15:53Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-12T20:15:53Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev5"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-12T20:15:53Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-14T19:31:44Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              }
+            ]
+          },
+          "title": "Fixture pull request 15916",
+          "url": "https://github.com/acme/service/pull/15916"
+        },
+        {
+          "additions": 206,
+          "author": {
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+            "login": "dev7"
+          },
+          "changedFiles": 5,
+          "createdAt": "2026-08-16T01:00:40Z",
+          "deletions": 24,
+          "id": "PR_fixture003",
+          "isDraft": false,
+          "number": 16131,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReadyForReviewEvent",
+                "createdAt": "2026-08-16T01:01:37Z"
+              }
+            ]
+          },
+          "title": "Fixture pull request 16131",
+          "url": "https://github.com/acme/service/pull/16131"
+        },
+        {
+          "additions": 9,
+          "author": {
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+            "login": "dev8"
+          },
+          "changedFiles": 2,
+          "createdAt": "2026-08-13T22:02:52Z",
+          "deletions": 13,
+          "id": "PR_fixture004",
+          "isDraft": false,
+          "number": 16062,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "title": "Fixture pull request 16062",
+          "url": "https://github.com/acme/service/pull/16062"
+        },
+        {
+          "id": "PR_fixture005",
+          "number": 16200,
+          "title": "Fixture pull request 16200",
+          "url": "https://github.com/acme/service/pull/16200",
+          "isDraft": false,
+          "createdAt": "2026-08-16T21:37:35Z",
+          "additions": 2394,
+          "deletions": 156,
+          "changedFiles": 50,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev1",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-17T13:37:05Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "additions": 9,
+          "author": {
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4",
+            "login": "dev8"
+          },
+          "changedFiles": 2,
+          "createdAt": "2026-08-13T22:02:52Z",
+          "deletions": 13,
+          "id": "PR_fixture006",
+          "isDraft": true,
+          "number": 16201,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "title": "Fixture draft pull request with a deliberately very long title that must truncate cleanly in the popover row without pushing the metadata line out of view",
+          "url": "https://github.com/acme/service/pull/16201"
+        }
+      ]
+    }
+  }
+}
