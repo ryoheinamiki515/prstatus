@@ -24,3 +24,12 @@ public func formatWaitingDuration(_ interval: TimeInterval) -> String {
   }
   return "\(minutes)m"
 }
+
+/// Compact line counts for the lookup pane: `638`, `7.5k`, `60k`.
+public func formatChangedLines(_ lines: Int) -> String {
+  switch lines {
+  case ..<1000: return "\(lines)"
+  case ..<10_000: return String(format: "%.1fk", Double(lines) / 1000)
+  default: return "\(lines / 1000)k"
+  }
+}

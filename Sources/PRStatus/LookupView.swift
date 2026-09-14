@@ -106,20 +106,23 @@ private struct ReviewerView: View {
         Notice(
           symbol: "checkmark.circle",
           title: "Nothing active for \(load.reviewer.login)",
-          detail: load.dormantCount == 0
-            ? "No open PR requests their review by name."
-            : dormantNote(load.dormantCount))
+          detail: [
+            load.dormantCount == 0
+              ? "No open PR requests their review by name." : dormantNote(load.dormantCount),
+            reviewedNote(load),
+          ].joined(separator: " "))
       } else {
         VStack(spacing: 0) {
           PRList(
-            items: load.active, now: now, thresholds: thresholds, maxHeight: 340, onOpen: onOpen)
-          if load.dormantCount > 0 {
-            Divider()
-            Text(dormantNote(load.dormantCount))
-              .font(.system(size: 10))
-              .foregroundStyle(.secondary)
-              .padding(.vertical, 6)
+            items: load.active, now: now, thresholds: thresholds, maxHeight: 320, onOpen: onOpen)
+          Divider()
+          VStack(spacing: 2) {
+            if load.dormantCount > 0 { Text(dormantNote(load.dormantCount)) }
+            Text(reviewedNote(load))
           }
+          .font(.system(size: 10))
+          .foregroundStyle(.secondary)
+          .padding(.vertical, 6)
         }
       }
     }
@@ -133,6 +136,17 @@ private func dormantNote(_ count: Int) -> String {
   return count == 1
     ? "1 more PR has had no activity for \(days) days."
     : "\(count) more PRs have had no activity for \(days) days."
+}
+
+private func reviewedNote(_ load: ReviewerLoad) -> String {
+  let days = Int(recentReviewWindow / 86400)
+  switch load.reviewedCount {
+  case 0: return "Reviewed nothing in the last \(days) days."
+  case 1: return "Reviewed 1 PR in the last \(days) days."
+  default:
+    return "Reviewed \(load.reviewedCount) PRs in the last \(days) days, "
+      + "\(formatChangedLines(load.reviewedWeight)) lines."
+  }
 }
 
 // MARK: - A team
@@ -178,9 +192,7 @@ private struct TeamView: View {
     ScrollView {
         VStack(spacing: 0) {
           ForEach(team.members) { load in
-            MemberRow(
-              load: load, scale: team.members.map(\.activeCount).max() ?? 0, now: now
-            ) {
+            MemberRow(load: load, scale: team.members.map(\.load).max() ?? 0, now: now) {
               onOpen(reviewQueueURL(login: load.reviewer.login))
             }
             if load.id != team.members.last?.id {
@@ -211,8 +223,8 @@ private struct TeamGlyph: View {
   }
 }
 
-/// One member, least loaded at the top: the login, then how much is waiting and for how
-/// long, with a bar so the whole team compares at a glance.
+/// One member, least loaded at the top: the login, what waits on them and what they got
+/// through this week, with a bar so the whole team compares at a glance.
 private struct MemberRow: View {
   let load: ReviewerLoad
   let scale: Int
@@ -223,18 +235,6 @@ private struct MemberRow: View {
 
   private var tint: Color { loadTint(load, scale: scale) }
 
-  private var detail: String {
-    var parts: [String] = []
-    if let name = load.reviewer.name { parts.append(name) }
-    if let age = load.oldestAge(now: now) {
-      parts.append("oldest \(formatWaitingDuration(age))")
-    } else {
-      parts.append("nothing active")
-    }
-    if load.dormantCount > 0 { parts.append("\(load.dormantCount) dormant") }
-    return parts.joined(separator: " · ")
-  }
-
   var body: some View {
     Button(action: onTap) {
       HStack(spacing: 9) {
@@ -243,18 +243,24 @@ private struct MemberRow: View {
           Text(load.reviewer.login)
             .font(.system(size: 12, weight: .medium))
             .lineLimit(1)
-          Text(detail)
+          Text(workLine(load))
             .font(.system(size: 10))
             .foregroundStyle(.secondary)
             .lineLimit(1)
+          if let waitLine = waitLine(load, now: now) {
+            Text(waitLine)
+              .font(.system(size: 10))
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+          }
         }
         Spacer(minLength: 8)
-        LoadBar(count: load.activeCount, scale: scale, tint: tint)
-        Text("\(load.activeCount)")
-          .font(.system(size: 13, weight: .semibold, design: .rounded))
+        LoadBar(load: load.load, scale: scale, tint: tint)
+        Text(formatChangedLines(load.load))
+          .font(.system(size: 12, weight: .semibold, design: .rounded))
           .monospacedDigit()
-          .foregroundStyle(load.activeCount == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(tint))
-          .frame(width: 24, alignment: .trailing)
+          .foregroundStyle(load.load == 0 ? AnyShapeStyle(.tertiary) : AnyShapeStyle(tint))
+          .frame(width: 34, alignment: .trailing)
       }
       .padding(.horizontal, 14)
       .padding(.vertical, 7)
@@ -264,13 +270,36 @@ private struct MemberRow: View {
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
-    .help("Open \(load.reviewer.login)'s review requests on GitHub")
+    .help(help)
+  }
+
+  private var help: String {
+    let name = load.reviewer.name.map { "\($0) — " } ?? ""
+    return "\(name)\(formatChangedLines(load.load)) lines of review work: "
+      + "\(formatChangedLines(load.pendingWeight)) waiting, "
+      + "\(formatChangedLines(load.reviewedWeight)) reviewed in the last "
+      + "\(Int(recentReviewWindow / 86400)) days. Click to open their requests on GitHub."
   }
 }
 
-/// Grey when nothing is active; otherwise the load colour on the same scale as the bar.
+/// "1 waiting · 11 reviewed": the counts behind the load, so the number stays explainable.
+private func workLine(_ load: ReviewerLoad) -> String {
+  let waiting = load.activeCount == 1 ? "1 waiting" : "\(load.activeCount) waiting"
+  let reviewed = load.reviewedCount == 1 ? "1 reviewed" : "\(load.reviewedCount) reviewed"
+  return "\(waiting) · \(reviewed)"
+}
+
+/// "oldest 8m · 2 dormant", or nil when there is nothing to say.
+private func waitLine(_ load: ReviewerLoad, now: Date) -> String? {
+  var parts: [String] = []
+  if let age = load.oldestAge(now: now) { parts.append("oldest \(formatWaitingDuration(age))") }
+  if load.dormantCount > 0 { parts.append("\(load.dormantCount) dormant") }
+  return parts.isEmpty ? nil : parts.joined(separator: " · ")
+}
+
+/// Grey when there is no load; otherwise the load colour on the same scale as the bar.
 private func loadTint(_ load: ReviewerLoad, scale: Int) -> Color {
-  guard let level = LoadLevel(activeCount: load.activeCount, scale: scale) else {
+  guard let level = LoadLevel(load: load.load, scale: scale) else {
     return Color.secondary.opacity(0.4)
   }
   return Color(StatusIcon.color(for: level))
@@ -279,51 +308,41 @@ private func loadTint(_ load: ReviewerLoad, scale: Int) -> Color {
 /// Proportional to the busiest member, so the bars answer "compared to whom?" rather than
 /// an absolute scale nobody has in mind.
 private struct LoadBar: View {
-  let count: Int
+  let load: Int
   let scale: Int
   let tint: Color
 
-  private let width: CGFloat = 72
+  private let width: CGFloat = 64
 
   var body: some View {
     ZStack(alignment: .leading) {
       Capsule().fill(Color.secondary.opacity(0.12))
-      if count > 0, scale > 0 {
+      if load > 0, scale > 0 {
         Capsule()
           .fill(tint)
-          .frame(width: max(6, width * CGFloat(count) / CGFloat(scale)))
+          .frame(width: max(6, width * CGFloat(load) / CGFloat(scale)))
       }
     }
     .frame(width: width, height: 5)
   }
 }
 
-/// The active count and the longest active wait for one person, with the dormant count
-/// beside the wait. Alone on screen, the count is coloured against the scale floor.
+/// The load for one person alone on screen, coloured against the scale floor, with the
+/// counts behind it underneath.
 private struct LoadLabel: View {
   let load: ReviewerLoad
   let now: Date
 
-  private var secondLine: String {
-    var parts: [String] = []
-    if let age = load.oldestAge(now: now) { parts.append("oldest \(formatWaitingDuration(age))") }
-    if load.dormantCount > 0 { parts.append("\(load.dormantCount) dormant") }
-    return parts.joined(separator: " · ")
-  }
-
   var body: some View {
     VStack(alignment: .trailing, spacing: 2) {
-      if load.activeCount > 0 {
-        Text(load.activeCount == 1 ? "1 active" : "\(load.activeCount) active")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundStyle(loadTint(load, scale: load.activeCount))
-      } else {
-        Text("nothing active")
-          .font(.system(size: 12, weight: .semibold))
-          .foregroundStyle(.secondary)
-      }
-      if !secondLine.isEmpty {
-        Text(secondLine)
+      Text(load.load == 0 ? "no load" : "\(formatChangedLines(load.load)) lines")
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(loadTint(load, scale: load.load))
+      Text(workLine(load))
+        .font(.system(size: 10))
+        .foregroundStyle(.secondary)
+      if let waitLine = waitLine(load, now: now) {
+        Text(waitLine)
           .font(.system(size: 10))
           .foregroundStyle(.secondary)
       }

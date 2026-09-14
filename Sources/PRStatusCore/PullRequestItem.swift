@@ -125,6 +125,8 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
     now.timeIntervalSince(updatedAt) > Self.dormantAfter
   }
 
+  public var changedLines: Int { additions + deletions }
+
   public func age(now: Date) -> TimeInterval {
     max(0, now.timeIntervalSince(waitingSince))
   }

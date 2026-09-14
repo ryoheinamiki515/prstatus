@@ -115,14 +115,26 @@ review: who has room for one?
 
 Type a GitHub login and press Return to see the open PRs that name that person as a
 reviewer, oldest first, in the same colours as your own queue. Type a team as `org/slug`
-to see every member ranked least loaded first: how many PRs name each of them, how long
-the oldest has waited, and a bar for comparing at a glance. Click a row to open that
-person's requests on GitHub.
+to see every member ranked least loaded first, with a bar for comparing at a glance. Click
+a row to open that person's requests on GitHub.
 
-The count and the bar are coloured by **load, not age**: green, yellow and red are thirds
-of the busiest member's count, with a floor of three so a lone request never reads as
-heavy. The queue colours its rows by how long they have waited; here the question is who
-is free, so the colour answers that and the wait stays in the text.
+**Load** is measured in changed lines, not in PRs, and it counts work done as well as work
+waiting. A count of pending PRs punishes the person who reviews quickly: they clear their
+queue, look free, and get the next one too. And one 3,000-line PR is not the same ask as
+three 40-line ones. So each member's number is the sum of
+
+- the lines waiting on them, over the active PRs that name them, and
+- the lines they reviewed in the last 7 days — PRs they have a review on that moved inside
+  the window, by anyone's authorship but their own.
+
+Each PR is capped at 2,000 lines, so a generated file or a lockfile does not count as ten
+real reviews. The counts behind the number stay on the row — `1 waiting · 11 reviewed` —
+so it is always explainable.
+
+The number and the bar are coloured by **load, not age**: green, yellow and red are thirds
+of the busiest member's load, with a floor of one capped PR so a lone small review never
+reads as heavy. The queue colours its rows by how long they have waited; here the question
+is who is free, so the colour answers that and the wait stays in the text.
 
 | | |
 |:--:|:--:|
@@ -146,12 +158,13 @@ active request is newest is less behind. Nothing waiting ranks above anything wa
 fewer dormant requests break the next tie, and login the last, so the order holds still
 between refreshes.
 
-A person costs one request. A team costs one request for the roster, then one search per
-member, six to a request, run concurrently. GitHub runs the searches inside a request one
-after another at a few hundred milliseconds each and cuts the request off at ten seconds,
-so six is the batch size, and a team of forty takes about as long as a team of six: around
-five seconds. Each member costs about one rate-limit point of the 5000 an hour. The pane
-refreshes only while it is showing, so the menu bar's poll stays at one point a minute.
+A person costs one request. A team costs one request for the roster, then two searches
+per member, three members to a request, run concurrently. GitHub runs the searches inside
+a request one after another and cuts the request off at ten seconds; a reviewed-by search
+takes over a second, so three is the batch size, and a team of forty takes about as long
+as a team of three: five to eight seconds. Each member costs about two rate-limit points
+of the 5000 an hour. The pane refreshes only while it is showing, so the menu bar's poll
+stays at one point a minute.
 
 The last name persists, so your own team is one click away. An unknown login or team gets
 its own message rather than an empty list: not-found is an answer, not a failure, and is
@@ -218,11 +231,11 @@ swift build --product SelfTest && ./.build/debug/SelfTest
 ```
 
 `swift test` **cannot run here**: the Command Line Tools ship neither XCTest nor
-swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 191
+swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 212
 checks over threshold boundaries, the wait-time cascade, the direct-versus-team split,
 response decoding, duration formatting, menu bar appearance, fetch-outcome transitions,
-error presentation, lookup parsing, reviewer ranking, the active-versus-dormant split
-and the not-found-versus-failure split. It is not a framework: no fixture isolation, no parameterisation, and
+error presentation, lookup parsing, reviewer ranking, review weights, the
+active-versus-dormant split and the not-found-versus-failure split. It is not a framework: no fixture isolation, no parameterisation, and
 it covers `PRStatusCore` only. The AppKit and SwiftUI layer is checked with
 `PRSTATUS_RENDER`.
 
@@ -256,7 +269,10 @@ every colour.
   PRs you authored.
 - A team's roster is cut at 100 members. A person's PRs are read 30 at a time, most
   recently updated first, so past 30 the active ones are all present and only dormant
-  ones are counted without being seen.
+  ones are counted without being seen. Reviewed PRs are read 50 at a time.
+- Changed lines are a rough proxy for review effort, and `reviewed-by:` counts a PR the
+  person reviewed at any time if it moved inside the window. The contributions API would
+  be exact, but GitHub hides other people's private activity there.
 - Thresholds are fixed at 1 and 3 hours unless overridden by environment variable.
 - Ad-hoc signed. Gatekeeper will need convincing if the bundle is moved between machines.
 - No app icon artwork, no auto-update, no notifications.

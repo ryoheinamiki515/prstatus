@@ -602,12 +602,26 @@ section("Ranking by availability (least loaded first)")
 func profile(_ login: String) -> ReviewerProfile {
   ReviewerProfile(login: login, name: nil, avatarURL: nil)
 }
-/// `count` requests in total; one active item at `oldest` ago when given, the rest dormant.
-func load(_ login: String, _ count: Int, oldest: TimeInterval?) -> ReviewerLoad {
+/// `count` requests in total; one active 100-line item at `oldest` ago when given, the rest
+/// dormant; `reviewed` capped lines of work done this week, as one PR.
+func load(
+  _ login: String, _ count: Int, oldest: TimeInterval?, reviewed: Int = 0
+) -> ReviewerLoad {
   ReviewerLoad(
     reviewer: profile(login), requestedCount: count,
-    items: oldest.map { [item(login, waitingSince: epoch.addingTimeInterval(-$0))] } ?? [],
+    items: oldest.map { [sized(item(login, waitingSince: epoch.addingTimeInterval(-$0)), 100)] }
+      ?? [],
+    reviewedCount: reviewed == 0 ? 0 : 1,
+    reviewed: reviewed == 0 ? [] : [ReviewedPullRequest(number: 1, changedLines: reviewed)],
     asOf: epoch)
+}
+func sized(_ item: PullRequestItem, _ lines: Int) -> PullRequestItem {
+  PullRequestItem(
+    id: item.id, number: item.number, title: item.title, url: item.url,
+    repository: item.repository, authorLogin: item.authorLogin,
+    authorAvatarURL: item.authorAvatarURL, isDraft: item.isDraft, updatedAt: item.updatedAt,
+    additions: lines, deletions: 0, changedFiles: 1, requestKind: item.requestKind,
+    waitingSince: item.waitingSince)
 }
 let dormantAge = PullRequestItem.dormantAfter + 60
 let idle = load("zed", 0, oldest: nil)
@@ -615,20 +629,39 @@ let oneRecent = load("amy", 1, oldest: 3600)
 let oneOld = load("bob", 1, oldest: 5 * 3600)
 let busy = load("cat", 4, oldest: 60)
 
-// `busy` has four requests but only one active item, so it ranks by that one.
+// `busy` has four requests but only one active 100-line item, so its load equals the others'.
 equal(
-  "fewest active requests first",
+  "least load first; equal loads fall to fewer active requests, then the newer oldest wait",
   rankByAvailability([busy, oneOld, oneRecent, idle]).map(\.id), ["zed", "cat", "amy", "bob"])
 let fourActive = ReviewerLoad(
   reviewer: profile("dan"), requestedCount: 4,
-  items: (1...4).map { item("dan\($0)", waitingSince: epoch.addingTimeInterval(-60 * Double($0))) },
-  asOf: epoch)
+  items: (1...4).map {
+    sized(item("dan\($0)", waitingSince: epoch.addingTimeInterval(-60 * Double($0))), 100)
+  },
+  reviewedCount: 0, reviewed: [], asOf: epoch)
 equal(
-  "count outranks age: four fresh requests still sit below one old one",
+  "load outranks age: four fresh requests still sit below one old one",
   rankByAvailability([fourActive, oneOld]).map(\.id), ["bob", "dan"])
 equal(
-  "among equal counts the shorter longest-wait ranks higher",
+  "among equal loads the shorter longest-wait ranks higher",
   rankByAvailability([oneOld, oneRecent]).map(\.id), ["amy", "bob"])
+// The fast reviewer: nothing waiting, but a week of reviews behind them.
+equal(
+  "work done this week counts as load, so an empty queue is not a free person",
+  rankByAvailability([load("fast", 0, oldest: nil, reviewed: 900), oneRecent]).map(\.id),
+  ["amy", "fast"])
+equal(
+  "a big PR waiting outweighs several small ones",
+  rankByAvailability([
+    ReviewerLoad(
+      reviewer: profile("big"), requestedCount: 1,
+      items: [sized(item("b1", waitingSince: epoch), 1500)], reviewedCount: 0, reviewed: [],
+      asOf: epoch),
+    ReviewerLoad(
+      reviewer: profile("small"), requestedCount: 3,
+      items: (1...3).map { sized(item("s\($0)", waitingSince: epoch), 40) }, reviewedCount: 0,
+      reviewed: [], asOf: epoch),
+  ]).map(\.id), ["small", "big"])
 equal(
   "fewer dormant requests break a tie on active ones",
   rankByAvailability([load("bob", 3, oldest: nil), load("amy", 1, oldest: nil)]).map(\.id),
@@ -650,30 +683,60 @@ check(
   !item("x", waitingSince: epoch).withUpdatedAt(epoch.addingTimeInterval(-PullRequestItem.dormantAfter))
     .isDormant(asOf: epoch))
 let split = ReviewerLoad(
-  reviewer: profile("x"), requestedCount: 5, items: [untouched, touchedToday], asOf: epoch)
+  reviewer: profile("x"), requestedCount: 5, items: [untouched, touchedToday],
+  reviewedCount: 0, reviewed: [], asOf: epoch)
 equal("active keeps only the moving PRs", split.active.map(\.id), ["t"])
 equal("dormant is the total less the active, so it covers PRs past the page", split.dormantCount, 4)
 equal("the oldest wait is read from the active PRs only", split.oldestWaitingSince, touchedToday.waitingSince)
 let allDormant = ReviewerLoad(
-  reviewer: profile("y"), requestedCount: 2, items: [untouched], asOf: epoch)
+  reviewer: profile("y"), requestedCount: 2, items: [untouched], reviewedCount: 0,
+  reviewed: [], asOf: epoch)
 check(
   "only dormant PRs -> nothing active and no oldest wait",
   allDormant.activeCount == 0 && allDormant.oldestAge(now: epoch) == nil)
 equal("dormant never goes negative when the page outruns the total", ReviewerLoad(
-  reviewer: profile("z"), requestedCount: 0, items: [touchedToday], asOf: epoch).dormantCount, 0)
+  reviewer: profile("z"), requestedCount: 0, items: [touchedToday], reviewedCount: 0,
+  reviewed: [], asOf: epoch).dormantCount, 0)
+
+section("Review weight (capped lines)")
+equal("small PR counts its lines", reviewWeight(changedLines: 638), 638)
+equal("exactly the cap", reviewWeight(changedLines: reviewWeightCap), reviewWeightCap)
+equal("a generated-file PR is capped", reviewWeight(changedLines: 60_366), reviewWeightCap)
+equal("negative lines clamp to zero", reviewWeight(changedLines: -5), 0)
+let weighted = ReviewerLoad(
+  reviewer: profile("w"), requestedCount: 2,
+  items: [sized(item("a", waitingSince: epoch), 3000), sized(item("b", waitingSince: epoch), 500)],
+  reviewedCount: 2,
+  reviewed: [
+    ReviewedPullRequest(number: 1, changedLines: 6800),
+    ReviewedPullRequest(number: 2, changedLines: 120),
+  ], asOf: epoch)
+equal("pending weight sums capped active lines", weighted.pendingWeight, 2500)
+equal("reviewed weight sums capped reviewed lines", weighted.reviewedWeight, 2120)
+equal("load is both together", weighted.load, 4620)
+equal("dormant PRs add no weight", ReviewerLoad(
+  reviewer: profile("d"), requestedCount: 1,
+  items: [sized(item("x", waitingSince: epoch).withUpdatedAt(epoch.addingTimeInterval(-dormantAge)), 900)],
+  reviewedCount: 0, reviewed: [], asOf: epoch).load, 0)
+
+section("Changed-lines labels")
+equal("under a thousand is exact", formatChangedLines(638), "638")
+equal("zero", formatChangedLines(0), "0")
+equal("thousands get one decimal", formatChangedLines(7512), "7.5k")
+equal("exactly a thousand", formatChangedLines(1000), "1.0k")
+equal("ten thousand and up drop the decimal", formatChangedLines(60_366), "60k")
 
 section("Load level (the lookup pane's colour)")
-check("nothing active -> no level", LoadLevel(activeCount: 0, scale: 9) == nil)
-equal("one of three -> light", LoadLevel(activeCount: 1, scale: 3), .light)
-equal("two of three -> moderate", LoadLevel(activeCount: 2, scale: 3), .moderate)
-equal("three of three -> heavy", LoadLevel(activeCount: 3, scale: 3), .heavy)
-// The floor: the only loaded person on a team of idle people has one request, not a heavy load.
-equal("a lone request is light even when it is the team's maximum", LoadLevel(activeCount: 1, scale: 1), .light)
-equal("two alone -> moderate, by the floor", LoadLevel(activeCount: 2, scale: 2), .moderate)
-equal("scale 6: two -> light", LoadLevel(activeCount: 2, scale: 6), .light)
-equal("scale 6: four sits exactly on the boundary -> moderate", LoadLevel(activeCount: 4, scale: 6), .moderate)
-equal("scale 6: five -> heavy", LoadLevel(activeCount: 5, scale: 6), .heavy)
-equal("a count above the scale is clamped, not undefined", LoadLevel(activeCount: 8, scale: 6), .heavy)
+let cap = reviewWeightCap
+check("no load -> no level", LoadLevel(load: 0, scale: 9000) == nil)
+equal("a third of the scale -> light", LoadLevel(load: 3000, scale: 9000), .light)
+equal("two thirds -> moderate", LoadLevel(load: 6000, scale: 9000), .moderate)
+equal("the maximum -> heavy", LoadLevel(load: 9000, scale: 9000), .heavy)
+// The floor: the only loaded person on an idle team has one small review, not a heavy load.
+equal("a lone small review is light even as the team's maximum", LoadLevel(load: 500, scale: 500), .light)
+equal("a lone capped PR is heavy, by the floor", LoadLevel(load: cap, scale: cap), .heavy)
+equal("just over a third -> moderate", LoadLevel(load: 3001, scale: 9000), .moderate)
+equal("a load above the scale is clamped, not undefined", LoadLevel(load: 12_000, scale: 9000), .heavy)
 equal(
   "items are kept oldest first however they arrive",
   ReviewerLoad(
@@ -681,7 +744,7 @@ equal(
     items: [
       item("new", waitingSince: epoch.addingTimeInterval(-60)),
       item("old", waitingSince: epoch.addingTimeInterval(-3600)),
-    ], asOf: epoch
+    ], reviewedCount: 0, reviewed: [], asOf: epoch
   ).items.map(\.id), ["old", "new"])
 let roster = TeamRoster(
   slug: "acme/x", name: "x", memberCount: 2, members: [profile("cat"), profile("zed")],
@@ -709,9 +772,9 @@ equal(
     ReviewerLoad(
       reviewer: profile("bob"), requestedCount: 1,
       items: [
-        item("bob", waitingSince: epoch.addingTimeInterval(-5 * 3600))
+        sized(item("bob", waitingSince: epoch.addingTimeInterval(-5 * 3600)), 100)
           .withUpdatedAt(epoch.addingTimeInterval(-dormantAge))
-      ], asOf: epoch)))
+      ], reviewedCount: 0, reviewed: [], asOf: epoch)))
 check(
   "mapItems leaves not-found alone",
   LookupResult.notFound(.user(login: "x")).mapItems(asOf: epoch) { $0 }
@@ -739,6 +802,10 @@ do {
     equal("user items", load.items.count, 3)
     equal("user active: one PR touched today", load.active.map(\.number), [17496])
     equal("user dormant: two untouched for days", load.dormantCount, 2)
+    equal("user reviewed this week", load.reviewedCount, 8)
+    equal("user reviewed weight", load.reviewedWeight, 3944)
+    equal("user pending weight is the one active PR, capped", load.pendingWeight, 2000)
+    equal("user load", load.load, 5944)
     equal("updatedAt decoded", load.items.first?.updatedAt, date("2026-09-08T23:47:15Z"))
     check(
       "user items are oldest first",
@@ -770,18 +837,21 @@ do {
     equal("per-member counts", loads.map(\.requestedCount), [0, 3, 2, 7, 0])
     equal("per-member active counts", loads.map(\.activeCount), [0, 1, 1, 3, 0])
     equal("per-member dormant counts", loads.map(\.dormantCount), [0, 2, 1, 4, 0])
+    equal("per-member reviewed counts", loads.map(\.reviewedCount), [11, 8, 45, 19, 4])
+    equal("per-member reviewed weight, capped", loads.map(\.reviewedWeight), [6918, 3944, 31530, 9823, 4570])
+    equal("per-member load", loads.map(\.load), [6918, 5944, 33292, 14250, 4570])
     check(
       "every load's items fit its count",
       loads.allSatisfy { $0.items.count <= $0.requestedCount })
     check(
       "a member with nothing waiting has no oldest wait",
       loads[0].oldestWaitingSince == nil && loads[4].oldestWaitingSince == nil)
-    // dev1 and reviewer-me both have one active PR; dev1's was requested later, so dev1 is
-    // less behind, even though dev1 has more requests in total.
+    // dev2 has nothing waiting but reviewed eleven PRs this week, so dev2 is not the free
+    // one; reviewer-me has one PR waiting and a week of large reviews behind it.
     equal(
-      "the team ranks by active load, ties by the newer oldest wait, then login",
+      "the team ranks by load, so the fast reviewer is not the first pick",
       TeamLoad(roster: roster, members: loads).members.map(\.id),
-      ["dev2", "dev3", "dev1", "reviewer-me", "dev4"])
+      ["dev3", "dev1", "dev2", "dev4", "reviewer-me"])
 
     let tooMany = roster.members + [profile("dev9")]
     check(
@@ -805,16 +875,23 @@ do {
 
 let threeMembers = GitHubClient.loadQuery(memberCount: 3)
 check(
-  "load query declares one variable per member",
-  threeMembers.contains("query($q0: String!, $q1: String!, $q2: String!)"))
+  "load query declares two variables per member",
+  threeMembers.contains("$q0: String!, $r0: String!, $q1: String!, $r1: String!, $q2: String!, $r2: String!)"))
 check(
-  "load query aliases one search per member",
-  threeMembers.contains("m2: search(query: $q2") && !threeMembers.contains("m3:"))
-check("load query carries the shared fragment", threeMembers.contains("fragment PullRequestFields"))
+  "load query aliases two searches per member",
+  threeMembers.contains("m2: search(query: $q2") && threeMembers.contains("r2: search(query: $r2")
+    && !threeMembers.contains("m3:"))
+check(
+  "load query carries both fragments",
+  threeMembers.contains("fragment PullRequestFields") && threeMembers.contains("fragment ReviewedFields"))
+equal(
+  "the reviewed search names the window's first day and excludes the person's own PRs",
+  GitHubClient.reviewedSearch(login: "jdoe", asOf: date("2026-09-14T18:00:00Z")),
+  "is:pr reviewed-by:jdoe -author:jdoe updated:>=2026-09-07 archived:false")
 
 section("Lookup: not found is an answer, not a failure")
 let missingUser = #"""
-  {"data":{"user":null,"search":{"issueCount":0,"nodes":[]}},
+  {"data":{"user":null,"search":{"issueCount":0,"nodes":[]},"reviewed":{"issueCount":0,"nodes":[]}},
    "errors":[{"type":"NOT_FOUND","path":["user"],
    "message":"Could not resolve to a User with the login of 'nobody'."}]}
   """#

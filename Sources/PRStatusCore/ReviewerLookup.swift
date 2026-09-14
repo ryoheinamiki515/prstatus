@@ -78,8 +78,31 @@ public struct ReviewerProfile: Equatable, Sendable, Identifiable {
   }
 }
 
-/// The PRs whose pending review requests name one person — the same question the menu
-/// bar answers for the viewer, asked about somebody else.
+/// How much review work one PR represents: its changed lines, capped so one generated
+/// file does not count as ten real reviews.
+public let reviewWeightCap = 2000
+
+public func reviewWeight(changedLines: Int) -> Int {
+  min(max(0, changedLines), reviewWeightCap)
+}
+
+/// How far back a review still counts as this week's work.
+public let recentReviewWindow: TimeInterval = 7 * 86400
+
+/// A PR the person reviewed inside the window, kept only as far as its size.
+public struct ReviewedPullRequest: Equatable, Sendable {
+  public let number: Int
+  public let changedLines: Int
+
+  public init(number: Int, changedLines: Int) {
+    self.number = number
+    self.changedLines = changedLines
+  }
+}
+
+/// One person's review work: what waits on them, and what they got through this week —
+/// the same question the menu bar answers for the viewer, asked about somebody else, and
+/// widened so that clearing a queue quickly does not read as having nothing to do.
 ///
 /// Split at construction into active and dormant, as of the fetch: a PR nobody has touched
 /// for `PullRequestItem.dormantAfter` is assigned but not being reviewed, so only the
@@ -96,20 +119,41 @@ public struct ReviewerLoad: Equatable, Sendable, Identifiable {
   /// Everything requested that is not active. Exact even past the first page, because the
   /// page is the most recently updated PRs, so the ones it cuts are dormant.
   public let dormantCount: Int
+  /// The search's total of PRs the person reviewed that moved inside the window.
+  public let reviewedCount: Int
+  /// The first page of those, for their sizes.
+  public let reviewed: [ReviewedPullRequest]
 
   public var id: String { reviewer.login }
 
   public init(
-    reviewer: ReviewerProfile, requestedCount: Int, items: [PullRequestItem], asOf now: Date
+    reviewer: ReviewerProfile, requestedCount: Int, items: [PullRequestItem],
+    reviewedCount: Int, reviewed: [ReviewedPullRequest], asOf now: Date
   ) {
     self.reviewer = reviewer
     self.requestedCount = requestedCount
     self.items = items.oldestFirst()
     self.active = self.items.filter { !$0.isDormant(asOf: now) }
     self.dormantCount = max(0, requestedCount - active.count)
+    self.reviewedCount = reviewedCount
+    self.reviewed = reviewed
   }
 
   public var activeCount: Int { active.count }
+
+  /// Capped lines waiting on the person.
+  public var pendingWeight: Int {
+    active.reduce(0) { $0 + reviewWeight(changedLines: $1.changedLines) }
+  }
+
+  /// Capped lines the person reviewed this week.
+  public var reviewedWeight: Int {
+    reviewed.reduce(0) { $0 + reviewWeight(changedLines: $1.changedLines) }
+  }
+
+  /// Work in flight plus work done this week, in capped lines. What the ranking, the bar
+  /// and the colour read.
+  public var load: Int { pendingWeight + reviewedWeight }
 
   /// nil when nothing active is waiting on this person.
   public var oldestWaitingSince: Date? { active.first?.waitingSince }
@@ -117,28 +161,30 @@ public struct ReviewerLoad: Equatable, Sendable, Identifiable {
   public func oldestAge(now: Date) -> TimeInterval? { active.first?.age(now: now) }
 
   public func withItems(_ items: [PullRequestItem], asOf now: Date) -> ReviewerLoad {
-    ReviewerLoad(reviewer: reviewer, requestedCount: requestedCount, items: items, asOf: now)
+    ReviewerLoad(
+      reviewer: reviewer, requestedCount: requestedCount, items: items,
+      reviewedCount: reviewedCount, reviewed: reviewed, asOf: now)
   }
 }
 
 /// How loaded one reviewer is next to the busiest one on the same screen. The scale is cut
-/// in thirds, with a floor of three so a lone request never reads as heavy. Unlike the
-/// queue's colours this says nothing about age: the pane's question is who is free, and
-/// the wait stays in the text.
+/// in thirds, with a floor of one capped PR so a single small review never reads as heavy.
+/// Unlike the queue's colours this says nothing about age: the pane's question is who is
+/// free, and the wait stays in the text.
 public enum LoadLevel: Equatable, Sendable {
   case light
   case moderate
   case heavy
 
-  public static let scaleFloor = 3
+  public static let scaleFloor = reviewWeightCap
 
-  /// nil when nothing is active. `scale` is the largest active count on screen.
-  public init?(activeCount: Int, scale: Int) {
-    guard activeCount > 0 else { return nil }
-    let scale = max(scale, Self.scaleFloor, activeCount)
-    if activeCount * 3 <= scale {
+  /// nil when there is no load. `scale` is the largest load on screen.
+  public init?(load: Int, scale: Int) {
+    guard load > 0 else { return nil }
+    let scale = max(scale, Self.scaleFloor, load)
+    if load * 3 <= scale {
       self = .light
-    } else if activeCount * 3 <= 2 * scale {
+    } else if load * 3 <= 2 * scale {
       self = .moderate
     } else {
       self = .heavy
@@ -183,12 +229,14 @@ public struct TeamLoad: Equatable, Sendable {
   }
 }
 
-/// Fewest active requests first. Among equals, the person whose oldest active request is
-/// newest is less behind, so they rank higher; nothing waiting ranks above anything
-/// waiting. Dormant requests break the next tie, then login, so the order is stable
-/// between refreshes.
+/// Least load first. Among equals, fewer active requests, then the person whose oldest
+/// active request is newest, then fewer dormant requests, then login, so the order is
+/// stable between refreshes.
 public func rankByAvailability(_ loads: [ReviewerLoad]) -> [ReviewerLoad] {
   loads.sorted { lhs, rhs in
+    if lhs.load != rhs.load {
+      return lhs.load < rhs.load
+    }
     if lhs.activeCount != rhs.activeCount {
       return lhs.activeCount < rhs.activeCount
     }

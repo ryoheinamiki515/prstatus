@@ -1,15 +1,24 @@
 import Foundation
 
 extension GitHubClient {
+  /// The reviewed-by search needs only sizes, so it selects far less than a queue row.
+  static let reviewedFragment = """
+    fragment ReviewedFields on PullRequest { number additions deletions }
+    """
+
   static let userLookupQuery = """
-    query($login: String!, $q: String!) {
+    query($login: String!, $q: String!, $r: String!) {
       user(login: $login) { login name avatarUrl }
       search(query: $q, type: ISSUE, first: 30) {
         issueCount
         nodes { ...PullRequestFields }
       }
+      reviewed: search(query: $r, type: ISSUE, first: 50) {
+        issueCount
+        nodes { ...ReviewedFields }
+      }
     }
-    """ + pullRequestFragment
+    """ + pullRequestFragment + reviewedFragment
 
   static let teamQuery = """
     query($organization: String!, $slug: String!, $q: String!) {
@@ -27,21 +36,26 @@ extension GitHubClient {
     }
     """
 
-  /// GitHub runs the searches in one request one after another, at a few hundred
-  /// milliseconds each, and cuts the request off with a 502 at ten seconds. Six per request
-  /// stays well inside that. The batches run concurrently, so a team of forty takes about
-  /// as long as a team of six.
-  static let loadBatchSize = 6
+  /// GitHub runs the searches in one request one after another and cuts the request off
+  /// with a 502 at ten seconds. Each member costs two searches, and a reviewed-by search
+  /// runs over a second; three members per request stays inside the limit. The batches
+  /// run concurrently, so a team of forty takes about as long as a team of three.
+  static let loadBatchSize = 3
 
-  /// One aliased search per member: `m0`, `m1`, … over variables `$q0`, `$q1`, …. Aliases
-  /// are positional, so `decodeLoads` must receive the same member list in the same order.
+  /// Two aliased searches per member — `m0` for what waits on them, `r0` for what they
+  /// reviewed — over variables `$q0` and `$r0`. Aliases are positional, so `decodeLoads`
+  /// must receive the same member list in the same order.
   public static func loadQuery(memberCount: Int) -> String {
-    let declarations = (0..<memberCount).map { "$q\($0): String!" }.joined(separator: ", ")
+    let declarations = (0..<memberCount).map { "$q\($0): String!, $r\($0): String!" }
+      .joined(separator: ", ")
     let searches = (0..<memberCount).map { index in
       "  m\(index): search(query: $q\(index), type: ISSUE, first: 30) "
-        + "{ issueCount nodes { ...PullRequestFields } }"
+        + "{ issueCount nodes { ...PullRequestFields } }\n"
+        + "  r\(index): search(query: $r\(index), type: ISSUE, first: 50) "
+        + "{ issueCount nodes { ...ReviewedFields } }"
     }.joined(separator: "\n")
     return "query(\(declarations)) {\n\(searches)\n}\n" + pullRequestFragment
+      + reviewedFragment
   }
 
   /// `user-review-requested:` matches only requests naming the login, not those routed
@@ -50,6 +64,18 @@ extension GitHubClient {
   /// and only dormant ones fall off; `ReviewerLoad` counts those from the total.
   static func requestedSearch(login: String) -> String {
     "is:open is:pr user-review-requested:\(login) archived:false sort:updated-desc"
+  }
+
+  /// PRs the person reviewed, by anyone's authorship but their own, that moved inside the
+  /// window. `reviewed-by:` matches a review from any time, so a PR touched this week that
+  /// they reviewed months ago counts once — accepted, since the alternative API hides other
+  /// people's private activity.
+  public static func reviewedSearch(login: String, asOf now: Date) -> String {
+    let since = now.addingTimeInterval(-recentReviewWindow)
+    let day = ISO8601DateFormatter()
+    day.formatOptions = [.withFullDate, .withDashSeparatorInDate]
+    return "is:pr reviewed-by:\(login) -author:\(login) updated:>=\(day.string(from: since)) "
+      + "archived:false"
   }
 
   static func teamRequestedSearch(slug: String) -> String {
@@ -62,11 +88,16 @@ extension GitHubClient {
     let token = try Self.fetchToken()
     switch target {
     case .user(let login):
+      let now = Date()
       let data = try await Self.post(
         Self.userLookupQuery,
-        variables: ["login": login, "q": Self.requestedSearch(login: login)],
+        variables: [
+          "login": login,
+          "q": Self.requestedSearch(login: login),
+          "r": Self.reviewedSearch(login: login, asOf: now),
+        ],
         token: token)
-      return try Self.decodeUserLookup(data, login: login, asOf: Date())
+      return try Self.decodeUserLookup(data, login: login, asOf: now)
 
     case .team(let organization, let slug):
       let data = try await Self.post(
@@ -95,6 +126,7 @@ extension GitHubClient {
           var variables: [String: String] = [:]
           for (position, member) in batch.enumerated() {
             variables["q\(position)"] = requestedSearch(login: member.login)
+            variables["r\(position)"] = reviewedSearch(login: member.login, asOf: now)
           }
           let data = try await post(
             loadQuery(memberCount: batch.count), variables: variables, token: token)
@@ -122,6 +154,8 @@ extension GitHubClient {
         reviewer: user.profile,
         requestedCount: payload.search.issueCount,
         items: payload.search.items(for: user.login),
+        reviewedCount: payload.reviewed.issueCount,
+        reviewed: payload.reviewed.reviewedPullRequests,
         asOf: now))
   }
 
@@ -146,13 +180,15 @@ extension GitHubClient {
       throw GitHubClientError.api("GitHub could not resolve a member's review requests.")
     }
     return try members.enumerated().map { index, member in
-      guard let search = searches["m\(index)"] else {
-        throw GitHubClientError.api("Response is missing the search for \(member.login).")
+      guard let requested = searches["m\(index)"], let reviewed = searches["r\(index)"] else {
+        throw GitHubClientError.api("Response is missing a search for \(member.login).")
       }
       return ReviewerLoad(
         reviewer: member,
-        requestedCount: search.issueCount,
-        items: search.items(for: member.login),
+        requestedCount: requested.issueCount,
+        items: requested.items(for: member.login),
+        reviewedCount: reviewed.issueCount,
+        reviewed: reviewed.reviewedPullRequests,
         asOf: now)
     }
   }
@@ -162,6 +198,7 @@ extension GitHubClient {
   struct UserLookupPayload: Decodable {
     let user: UserNode?
     let search: Search
+    let reviewed: Search
   }
 
   struct UserNode: Decodable {

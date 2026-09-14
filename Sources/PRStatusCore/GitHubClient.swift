@@ -273,6 +273,15 @@ public struct GitHubClient: Sendable {
     func items(for reviewerLogin: String) -> [PullRequestItem] {
       (nodes ?? []).compactMap { $0.toItem(reviewerLogin: reviewerLogin) }.oldestFirst()
     }
+
+    /// Sizes only, for the reviewed-by search.
+    var reviewedPullRequests: [ReviewedPullRequest] {
+      (nodes ?? []).compactMap { node in
+        guard let number = node.number else { return nil }
+        return ReviewedPullRequest(
+          number: number, changedLines: (node.additions ?? 0) + (node.deletions ?? 0))
+      }
+    }
   }
 
   /// `search(type: ISSUE)` can yield nodes that are not pull requests, which arrive as

@@ -767,6 +767,466 @@
     "m4": {
       "issueCount": 0,
       "nodes": []
+    },
+    "r0": {
+      "issueCount": 11,
+      "nodes": [
+        {
+          "number": 17581,
+          "additions": 497,
+          "deletions": 141
+        },
+        {
+          "number": 17530,
+          "additions": 506,
+          "deletions": 53
+        },
+        {
+          "number": 17447,
+          "additions": 245,
+          "deletions": 149
+        },
+        {
+          "number": 17388,
+          "additions": 71,
+          "deletions": 25
+        },
+        {
+          "number": 17353,
+          "additions": 333,
+          "deletions": 35
+        },
+        {
+          "number": 17279,
+          "additions": 1431,
+          "deletions": 42
+        },
+        {
+          "number": 17278,
+          "additions": 216,
+          "deletions": 39
+        },
+        {
+          "number": 17252,
+          "additions": 511,
+          "deletions": 60
+        },
+        {
+          "number": 17251,
+          "additions": 301,
+          "deletions": 0
+        },
+        {
+          "number": 17227,
+          "additions": 150,
+          "deletions": 151
+        },
+        {
+          "number": 16788,
+          "additions": 1446,
+          "deletions": 516
+        }
+      ]
+    },
+    "r1": {
+      "issueCount": 8,
+      "nodes": [
+        {
+          "number": 17532,
+          "additions": 30,
+          "deletions": 0
+        },
+        {
+          "number": 17472,
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "number": 17448,
+          "additions": 967,
+          "deletions": 34
+        },
+        {
+          "number": 17309,
+          "additions": 1120,
+          "deletions": 30
+        },
+        {
+          "number": 17296,
+          "additions": 1416,
+          "deletions": 1
+        },
+        {
+          "number": 17061,
+          "additions": 289,
+          "deletions": 0
+        },
+        {
+          "number": 16952,
+          "additions": 34,
+          "deletions": 8
+        },
+        {
+          "number": 16592,
+          "additions": 1,
+          "deletions": 1
+        }
+      ]
+    },
+    "r2": {
+      "issueCount": 45,
+      "nodes": [
+        {
+          "number": 17592,
+          "additions": 4,
+          "deletions": 0
+        },
+        {
+          "number": 17551,
+          "additions": 8,
+          "deletions": 0
+        },
+        {
+          "number": 17534,
+          "additions": 0,
+          "deletions": 4
+        },
+        {
+          "number": 17515,
+          "additions": 1545,
+          "deletions": 102
+        },
+        {
+          "number": 17507,
+          "additions": 0,
+          "deletions": 528
+        },
+        {
+          "number": 17506,
+          "additions": 118,
+          "deletions": 71
+        },
+        {
+          "number": 17504,
+          "additions": 262,
+          "deletions": 146
+        },
+        {
+          "number": 17503,
+          "additions": 383,
+          "deletions": 6437
+        },
+        {
+          "number": 17502,
+          "additions": 1653,
+          "deletions": 174
+        },
+        {
+          "number": 17499,
+          "additions": 2501,
+          "deletions": 630
+        },
+        {
+          "number": 17494,
+          "additions": 2300,
+          "deletions": 110
+        },
+        {
+          "number": 17459,
+          "additions": 6372,
+          "deletions": 835
+        },
+        {
+          "number": 17458,
+          "additions": 30,
+          "deletions": 1
+        },
+        {
+          "number": 17453,
+          "additions": 21,
+          "deletions": 0
+        },
+        {
+          "number": 17418,
+          "additions": 177,
+          "deletions": 100
+        },
+        {
+          "number": 17406,
+          "additions": 398,
+          "deletions": 20
+        },
+        {
+          "number": 17385,
+          "additions": 533,
+          "deletions": 63
+        },
+        {
+          "number": 17383,
+          "additions": 252,
+          "deletions": 50
+        },
+        {
+          "number": 17370,
+          "additions": 975,
+          "deletions": 263
+        },
+        {
+          "number": 17364,
+          "additions": 2,
+          "deletions": 0
+        },
+        {
+          "number": 17355,
+          "additions": 50,
+          "deletions": 6
+        },
+        {
+          "number": 17348,
+          "additions": 31,
+          "deletions": 0
+        },
+        {
+          "number": 17343,
+          "additions": 189,
+          "deletions": 159
+        },
+        {
+          "number": 17342,
+          "additions": 10,
+          "deletions": 1
+        },
+        {
+          "number": 17337,
+          "additions": 536,
+          "deletions": 49
+        },
+        {
+          "number": 17317,
+          "additions": 7701,
+          "deletions": 968
+        },
+        {
+          "number": 17314,
+          "additions": 52,
+          "deletions": 23
+        },
+        {
+          "number": 17307,
+          "additions": 4,
+          "deletions": 1
+        },
+        {
+          "number": 17286,
+          "additions": 742,
+          "deletions": 36
+        },
+        {
+          "number": 17284,
+          "additions": 60,
+          "deletions": 4
+        },
+        {
+          "number": 17280,
+          "additions": 10,
+          "deletions": 4
+        },
+        {
+          "number": 17275,
+          "additions": 40,
+          "deletions": 8
+        },
+        {
+          "number": 17273,
+          "additions": 689,
+          "deletions": 35
+        },
+        {
+          "number": 17256,
+          "additions": 2474,
+          "deletions": 32
+        },
+        {
+          "number": 17240,
+          "additions": 11,
+          "deletions": 6
+        },
+        {
+          "number": 17239,
+          "additions": 5230,
+          "deletions": 3916
+        },
+        {
+          "number": 17236,
+          "additions": 10,
+          "deletions": 0
+        },
+        {
+          "number": 17235,
+          "additions": 2446,
+          "deletions": 75
+        },
+        {
+          "number": 17227,
+          "additions": 150,
+          "deletions": 151
+        },
+        {
+          "number": 17226,
+          "additions": 831,
+          "deletions": 110
+        },
+        {
+          "number": 17219,
+          "additions": 30,
+          "deletions": 8
+        },
+        {
+          "number": 17215,
+          "additions": 1175,
+          "deletions": 100
+        },
+        {
+          "number": 17189,
+          "additions": 204,
+          "deletions": 14
+        },
+        {
+          "number": 17143,
+          "additions": 437,
+          "deletions": 54
+        },
+        {
+          "number": 17135,
+          "additions": 4246,
+          "deletions": 180
+        }
+      ]
+    },
+    "r3": {
+      "issueCount": 19,
+      "nodes": [
+        {
+          "number": 17526,
+          "additions": 35,
+          "deletions": 10
+        },
+        {
+          "number": 17524,
+          "additions": 19,
+          "deletions": 108
+        },
+        {
+          "number": 17519,
+          "additions": 510,
+          "deletions": 23
+        },
+        {
+          "number": 17513,
+          "additions": 10,
+          "deletions": 2
+        },
+        {
+          "number": 17484,
+          "additions": 537,
+          "deletions": 445
+        },
+        {
+          "number": 17468,
+          "additions": 645,
+          "deletions": 62
+        },
+        {
+          "number": 17466,
+          "additions": 669,
+          "deletions": 821
+        },
+        {
+          "number": 17440,
+          "additions": 42,
+          "deletions": 14
+        },
+        {
+          "number": 17434,
+          "additions": 109,
+          "deletions": 0
+        },
+        {
+          "number": 17430,
+          "additions": 1373,
+          "deletions": 209
+        },
+        {
+          "number": 17421,
+          "additions": 86,
+          "deletions": 38
+        },
+        {
+          "number": 17397,
+          "additions": 3,
+          "deletions": 0
+        },
+        {
+          "number": 17367,
+          "additions": 23,
+          "deletions": 0
+        },
+        {
+          "number": 17347,
+          "additions": 434,
+          "deletions": 72
+        },
+        {
+          "number": 17331,
+          "additions": 324,
+          "deletions": 145
+        },
+        {
+          "number": 17093,
+          "additions": 812,
+          "deletions": 113
+        },
+        {
+          "number": 17086,
+          "additions": 701,
+          "deletions": 323
+        },
+        {
+          "number": 16951,
+          "additions": 495,
+          "deletions": 71
+        },
+        {
+          "number": 16897,
+          "additions": 529,
+          "deletions": 11
+        }
+      ]
+    },
+    "r4": {
+      "issueCount": 4,
+      "nodes": [
+        {
+          "number": 17431,
+          "additions": 2284,
+          "deletions": 163
+        },
+        {
+          "number": 17301,
+          "additions": 1153,
+          "deletions": 50
+        },
+        {
+          "number": 17213,
+          "additions": 261,
+          "deletions": 1
+        },
+        {
+          "number": 17185,
+          "additions": 890,
+          "deletions": 215
+        }
+      ]
     }
   }
 }

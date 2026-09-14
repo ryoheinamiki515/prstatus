@@ -164,6 +164,51 @@
           }
         }
       ]
+    },
+    "reviewed": {
+      "issueCount": 8,
+      "nodes": [
+        {
+          "number": 17532,
+          "additions": 30,
+          "deletions": 0
+        },
+        {
+          "number": 17472,
+          "additions": 13,
+          "deletions": 0
+        },
+        {
+          "number": 17448,
+          "additions": 967,
+          "deletions": 34
+        },
+        {
+          "number": 17309,
+          "additions": 1120,
+          "deletions": 30
+        },
+        {
+          "number": 17296,
+          "additions": 1416,
+          "deletions": 1
+        },
+        {
+          "number": 17061,
+          "additions": 289,
+          "deletions": 0
+        },
+        {
+          "number": 16952,
+          "additions": 34,
+          "deletions": 8
+        },
+        {
+          "number": 16592,
+          "additions": 1,
+          "deletions": 1
+        }
+      ]
     }
   }
 }
