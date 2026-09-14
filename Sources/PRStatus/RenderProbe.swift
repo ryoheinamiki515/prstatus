@@ -25,7 +25,9 @@ enum RenderProbe {
 
     for appearance in [NSAppearance.Name.aqua, .darkAqua] {
       let suffix = appearance == .aqua ? "light" : "dark"
-      render("01-loading-\(suffix)", model: model { try await never() }, appearance, directory)
+      render(
+        "01-loading-\(suffix)", model: model(directRequestsOnly: false) { try await never() },
+        appearance, directory)
       render("02-empty-\(suffix)", model: settled { [] }, appearance, directory)
       render("03-loaded-\(suffix)", model: settled { fixtureItems }, appearance, directory)
       render(
@@ -39,6 +41,16 @@ enum RenderProbe {
         appearance, directory)
       render("07-stale-\(suffix)", model: stale(fixtureItems), appearance, directory)
       render("08-stale-empty-\(suffix)", model: stale([]), appearance, directory)
+      render(
+        "09-direct-only-\(suffix)",
+        model: settled(directRequestsOnly: true) { fixtureItems }, appearance, directory)
+      // Every row behind the filter: the state that has to explain itself rather than
+      // read as an empty queue.
+      render(
+        "10-direct-only-empty-\(suffix)",
+        model: settled(directRequestsOnly: true) {
+          fixtureItems.filter { $0.requestKind == .team }
+        }, appearance, directory)
     }
   }
 
@@ -48,17 +60,19 @@ enum RenderProbe {
   }
 
   private static func model(
+    directRequestsOnly: Bool,
     _ load: @escaping () async throws -> [PullRequestItem]
   ) -> AppModel {
-    AppModel(thresholds: .standard, loadItems: load)
+    AppModel(thresholds: .standard, directRequestsOnly: directRequestsOnly, loadItems: load)
   }
 
   /// Waits on the model reaching a terminal state rather than on a fixed delay, so a slow
   /// machine cannot silently render a spinner into a documentation image.
   private static func settled(
+    directRequestsOnly: Bool = false,
     _ load: @escaping () async throws -> [PullRequestItem]
   ) -> AppModel {
-    let model = model(load)
+    let model = model(directRequestsOnly: directRequestsOnly, load)
     model.refresh()
     guard runLoop(until: { model.state != .loading }) else {
       fatalError("model never left .loading; refusing to render a spinner")

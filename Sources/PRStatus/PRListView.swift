@@ -85,10 +85,20 @@ struct PRListView: View {
         .foregroundStyle(.secondary)
       Text("Nothing waiting on you")
         .font(.system(size: 12, weight: .medium))
-      Text("No open PRs have requested your review.")
+      Text(emptyDetail)
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
+    }
+  }
+
+  /// An empty list with rows behind the filter is a different fact from an empty queue,
+  /// and reads as a bug unless it says so.
+  private var emptyDetail: String {
+    switch model.hiddenCount {
+    case 0: return "No open PRs have requested your review."
+    case 1: return "1 PR requested from your team is hidden."
+    default: return "\(model.hiddenCount) PRs requested from your team are hidden."
     }
   }
 
@@ -171,6 +181,17 @@ struct PRListView: View {
       )
       .toggleStyle(.checkbox)
       .font(.system(size: 11))
+      Toggle(
+        "Direct only",
+        isOn: Binding(
+          get: { model.directRequestsOnly },
+          set: { model.setDirectRequestsOnly($0) })
+      )
+      .toggleStyle(.checkbox)
+      .font(.system(size: 11))
+      .help(
+        "Show only the PRs that request your review by name. This hides the PRs that "
+          + "GitHub requested from a team you belong to.")
       Spacer()
       // Suppressed while stale: the banner already states the same time, and two
       // timestamps saying different things is worse than one.

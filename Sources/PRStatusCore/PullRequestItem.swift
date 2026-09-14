@@ -36,6 +36,16 @@ public struct UrgencyThresholds: Sendable, Equatable {
   }
 }
 
+/// How this PR reached my queue. GitHub's `review-requested:@me` search matches both
+/// routes, so the search alone cannot tell them apart.
+public enum ReviewRequestKind: Sendable, Equatable {
+  /// A pending review request names me.
+  case direct
+  /// No pending request names me. The PR is in my queue at all because a review request
+  /// exists, so a team I belong to carries it.
+  case team
+}
+
 public enum TimelineEvent: Sendable, Equatable {
   /// `reviewerLogin` is nil when the request targeted a team rather than a person.
   case reviewRequested(at: Date, reviewerLogin: String?)
@@ -54,13 +64,16 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
   public let additions: Int
   public let deletions: Int
   public let changedFiles: Int
+  /// Whether someone asked me by name — see `resolveRequestKind`.
+  public let requestKind: ReviewRequestKind
   /// When this PR started waiting on *me* — see `resolveWaitingSince`.
   public let waitingSince: Date
 
   public init(
     id: String, number: Int, title: String, url: URL, repository: String,
     authorLogin: String, authorAvatarURL: URL?, isDraft: Bool,
-    additions: Int, deletions: Int, changedFiles: Int, waitingSince: Date
+    additions: Int, deletions: Int, changedFiles: Int,
+    requestKind: ReviewRequestKind, waitingSince: Date
   ) {
     self.id = id
     self.number = number
@@ -73,6 +86,7 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
     self.additions = additions
     self.deletions = deletions
     self.changedFiles = changedFiles
+    self.requestKind = requestKind
     self.waitingSince = waitingSince
   }
 
@@ -88,7 +102,7 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
       id: id, number: number, title: title, url: url, repository: repository,
       authorLogin: authorLogin, authorAvatarURL: authorAvatarURL, isDraft: isDraft,
       additions: additions, deletions: deletions, changedFiles: changedFiles,
-      waitingSince: date)
+      requestKind: requestKind, waitingSince: date)
   }
 
   public func age(now: Date) -> TimeInterval {
@@ -110,6 +124,21 @@ extension Urgency {
       self = .fresh
     }
   }
+}
+
+/// Separates "someone asked me" from "someone asked a team I belong to".
+///
+/// `requestedUserLogins` holds the logins of the reviewers currently requested on the PR,
+/// so a request that was later removed does not count. Team reviewers carry a name and no
+/// login, which is why they never appear here.
+public func resolveRequestKind(
+  requestedUserLogins: [String],
+  viewerLogin: String
+) -> ReviewRequestKind {
+  let namesMe = requestedUserLogins.contains {
+    $0.caseInsensitiveCompare(viewerLogin) == .orderedSame
+  }
+  return namesMe ? .direct : .team
 }
 
 /// Picks the moment a PR entered my review queue.

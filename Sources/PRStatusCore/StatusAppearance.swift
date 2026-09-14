@@ -18,6 +18,19 @@ public enum LoadState: Equatable, Sendable {
     if case .loaded(let items, _, _) = self { return items }
     return []
   }
+
+  /// Drops the team-routed PRs when the popover asks for direct requests only.
+  ///
+  /// The whole state is narrowed, not just the row list, so the icon colour, the menu bar
+  /// count and the rows cannot disagree about which PRs are in the queue. Both routes are
+  /// always fetched, so turning the filter off needs no network round trip.
+  public func showing(directRequestsOnly: Bool) -> LoadState {
+    guard directRequestsOnly, case .loaded(let items, let at, let refreshError) = self else {
+      return self
+    }
+    return .loaded(
+      items: items.filter { $0.requestKind == .direct }, at: at, refreshError: refreshError)
+  }
 }
 
 /// What the menu bar icon should show. `unknown` and `unavailable` exist so that not

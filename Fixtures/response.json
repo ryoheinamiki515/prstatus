@@ -23,6 +23,28 @@
             "login": "dev1",
             "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
           },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev2"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          },
           "timelineItems": {
             "nodes": [
               {
@@ -66,6 +88,16 @@
           "number": 15916,
           "repository": {
             "nameWithOwner": "acme/service"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              }
+            ]
           },
           "timelineItems": {
             "nodes": [
@@ -133,6 +165,16 @@
           "repository": {
             "nameWithOwner": "acme/service"
           },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          },
           "timelineItems": {
             "nodes": [
               {
@@ -159,6 +201,16 @@
           "repository": {
             "nameWithOwner": "acme/service"
           },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          },
           "timelineItems": {
             "nodes": []
           },
@@ -181,6 +233,16 @@
           "author": {
             "login": "dev1",
             "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
           },
           "timelineItems": {
             "nodes": [
@@ -209,6 +271,16 @@
           "number": 16201,
           "repository": {
             "nameWithOwner": "acme/service"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
           },
           "timelineItems": {
             "nodes": []

@@ -3,7 +3,11 @@ import PRStatusCore
 
 @MainActor
 final class AppModel: ObservableObject {
-  @Published private(set) var state: LoadState = .never
+  /// Every PR the fetch returned, before the filter. Kept whole so the filter can change
+  /// without a network round trip.
+  @Published private var fetchedState: LoadState = .never
+  /// Hides the PRs that GitHub requested from a team rather than from me by name.
+  @Published private(set) var directRequestsOnly: Bool
   /// Distinct from `.loading`: a background refresh while rows are already on screen must
   /// not blank the list out.
   @Published private(set) var isRefreshing = false
@@ -26,7 +30,13 @@ final class AppModel: ObservableObject {
   private let fetchInterval: TimeInterval = 60
   private var tickInterval: TimeInterval { max(1, min(15, thresholds.stale / 3)) }
 
+  /// The queue as the popover and the menu bar icon both read it.
+  var state: LoadState { fetchedState.showing(directRequestsOnly: directRequestsOnly) }
+
   var items: [PullRequestItem] { state.items }
+
+  /// How many PRs the filter removes, so the empty state can say why it is empty.
+  var hiddenCount: Int { fetchedState.items.count - state.items.count }
 
   var appearance: StatusAppearance {
     statusAppearance(for: state, now: now, thresholds: thresholds)
@@ -34,10 +44,18 @@ final class AppModel: ObservableObject {
 
   init(
     thresholds: UrgencyThresholds = .fromEnvironment(),
+    directRequestsOnly: Bool,
     loadItems: @escaping () async throws -> [PullRequestItem]
   ) {
     self.thresholds = thresholds
+    self.directRequestsOnly = directRequestsOnly
     self.loadItems = loadItems
+  }
+
+  func setDirectRequestsOnly(_ enabled: Bool) {
+    guard enabled != directRequestsOnly else { return }
+    ReviewFilterPreference.setDirectRequestsOnly(enabled)
+    directRequestsOnly = enabled
   }
 
   func start() {
@@ -81,7 +99,7 @@ final class AppModel: ObservableObject {
   func refresh() {
     guard !isRefreshing else { return }
     isRefreshing = true
-    if case .loaded = state {} else { state = .loading }
+    if case .loaded = fetchedState {} else { fetchedState = .loading }
 
     Task { @MainActor in
       defer { isRefreshing = false }
@@ -96,7 +114,7 @@ final class AppModel: ObservableObject {
       let completedAt = Date()
       lastFetch = completedAt
       now = completedAt
-      state = nextState(after: state, result: result, now: completedAt)
+      fetchedState = nextState(after: fetchedState, result: result, now: completedAt)
     }
   }
 }

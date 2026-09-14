@@ -81,6 +81,31 @@ The popover follows your system appearance:
 
 <img src="docs/popover-dark.png" width="380" alt="The same queue rendered in dark appearance">
 
+## Direct only
+
+GitHub's `review-requested:@me` search matches two different things: a PR that asks **you**
+for review, and a PR that asks a **team** you belong to. On a repository with CODEOWNERS
+the second kind can outnumber the first several times over, and it buries the requests
+someone actually picked you for.
+
+Tick **Direct only** in the footer to keep just the PRs that name you.
+
+<img src="docs/direct-only.png" width="380" alt="The popover with Direct only ticked, showing two of the six pull requests">
+
+A PR counts as direct when the reviewers currently requested on it include your login. A
+team reviewer carries a name and no login, so it never does — the same split GitHub's own
+`user-review-requested:@me` search makes. A request that was later withdrawn does not
+count, because the list is the PR's present state rather than its history.
+
+The setting persists across launches and starts off, so an upgrade hides nothing you were
+already being shown. Toggling it fetches nothing: both kinds arrive in one query, and the
+switch only decides what to do with them.
+
+It filters the whole queue rather than just the visible rows. A hidden PR stops counting
+toward the menu bar number and can no longer colour the circle — a red circle you cannot
+explain from the list would be worse than no filter at all. When the filter empties the
+list, the popover says how many PRs sit behind it instead of reporting a clear queue.
+
 ## Authentication
 
 PRStatus shells out to `gh auth token`, so it inherits whichever account `gh` is signed in
@@ -140,11 +165,12 @@ swift build --product SelfTest && ./.build/debug/SelfTest
 ```
 
 `swift test` **cannot run here**: the Command Line Tools ship neither XCTest nor
-swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 85
-checks over threshold boundaries, the wait-time cascade, response decoding, duration
-formatting, menu bar appearance, fetch-outcome transitions and error presentation. It is
-not a framework: no fixture isolation, no parameterisation, and it covers `PRStatusCore`
-only. The AppKit and SwiftUI layer is checked with `PRSTATUS_RENDER`.
+swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 108
+checks over threshold boundaries, the wait-time cascade, the direct-versus-team split,
+response decoding, duration formatting, menu bar appearance, fetch-outcome transitions and
+error presentation. It is not a framework: no fixture isolation, no parameterisation, and
+it covers `PRStatusCore` only. The AppKit and SwiftUI layer is checked with
+`PRSTATUS_RENDER`.
 
 ```
 Sources/PRStatusCore/   pure logic, no AppKit — the part SelfTest links
@@ -157,7 +183,9 @@ Fixtures/               captured GraphQL response
 
 `Fixtures/response.json` is a real GraphQL response with titles, logins, repository names
 and node IDs replaced. The structure is untouched, including the case that matters most: a
-review request routed through a team carries a `name` and no `login`.
+review request routed through a team carries a `name` and no `login`. Two of its six PRs
+name the viewer directly, so the **Direct only** filter has something to keep and something
+to drop.
 
 Its timestamps are fixed, so with real time every row eventually reads as urgent. The
 render probe spreads the sample ages across the thresholds so documentation shots show

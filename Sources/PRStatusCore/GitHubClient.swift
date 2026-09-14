@@ -64,6 +64,15 @@ public struct GitHubClient: Sendable {
             changedFiles
             repository { nameWithOwner }
             author { login avatarUrl }
+            reviewRequests(first: 100) {
+              nodes {
+                requestedReviewer {
+                  __typename
+                  ... on User { login }
+                  ... on Team { name }
+                }
+              }
+            }
             timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) {
               nodes {
                 __typename
@@ -239,6 +248,7 @@ public struct GitHubClient: Sendable {
     let changedFiles: Int?
     let repository: Repository?
     let author: Author?
+    let reviewRequests: ReviewRequests?
     let timelineItems: TimelineItems?
 
     func toItem(viewerLogin: String) -> PullRequestItem? {
@@ -248,6 +258,9 @@ public struct GitHubClient: Sendable {
       else { return nil }
 
       let events = (timelineItems?.nodes ?? []).compactMap { $0.toEvent() }
+      let requestedUserLogins = (reviewRequests?.nodes ?? []).compactMap {
+        $0.requestedReviewer?.login
+      }
       return PullRequestItem(
         id: id,
         number: number,
@@ -260,6 +273,8 @@ public struct GitHubClient: Sendable {
         additions: additions ?? 0,
         deletions: deletions ?? 0,
         changedFiles: changedFiles ?? 0,
+        requestKind: resolveRequestKind(
+          requestedUserLogins: requestedUserLogins, viewerLogin: viewerLogin),
         waitingSince: resolveWaitingSince(
           events: events, viewerLogin: viewerLogin, createdAt: createdAt))
     }
@@ -270,6 +285,11 @@ public struct GitHubClient: Sendable {
     let login: String?
     let avatarUrl: String?
   }
+  /// Only `... on User { login }` is selected, so a bot or a team reviewer decodes with a
+  /// nil login and never counts as a request naming me.
+  struct ReviewRequests: Decodable { let nodes: [ReviewRequestNode]? }
+  struct ReviewRequestNode: Decodable { let requestedReviewer: RequestedReviewer? }
+
   struct TimelineItems: Decodable { let nodes: [TimelineNode]? }
 
   struct TimelineNode: Decodable {
@@ -299,7 +319,7 @@ public struct GitHubClient: Sendable {
   }
 
   /// A team reviewer has `name` but no `login`; leaving `login` nil is what routes it
-  /// into the team branch of `resolveWaitingSince`.
+  /// into the team branch of both `resolveWaitingSince` and `resolveRequestKind`.
   struct RequestedReviewer: Decodable {
     let typename: String?
     let login: String?
