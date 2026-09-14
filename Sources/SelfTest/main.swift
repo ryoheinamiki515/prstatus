@@ -51,11 +51,14 @@ equal("age 5d -> urgent", Urgency(age: 432_000, thresholds: standard), .urgent)
 
 // MARK: - Aggregate
 
-func item(_ id: String, waitingSince: Date) -> PullRequestItem {
+func item(
+  _ id: String, waitingSince: Date, requestKind: ReviewRequestKind = .direct
+) -> PullRequestItem {
   PullRequestItem(
     id: id, number: 1, title: "t", url: URL(string: "https://example.com")!,
     repository: "acme/service", authorLogin: "dev", authorAvatarURL: nil, isDraft: false,
-    additions: 0, deletions: 0, changedFiles: 0, waitingSince: waitingSince)
+    additions: 0, deletions: 0, changedFiles: 0, requestKind: requestKind,
+    waitingSince: waitingSince)
 }
 
 section("Aggregate urgency (drives the menu bar circle)")
@@ -97,7 +100,7 @@ check(
   PullRequestItem(
     id: "x", number: 16062, title: "t", url: URL(string: "https://example.com")!,
     repository: "acme/service", authorLogin: "dev", authorAvatarURL: nil, isDraft: false,
-    additions: 0, deletions: 0, changedFiles: 0, waitingSince: epoch
+    additions: 0, deletions: 0, changedFiles: 0, requestKind: .direct, waitingSince: epoch
   ).reference == "acme/service #16062",
   "thousands separator must not appear in a PR number")
 
@@ -164,6 +167,31 @@ equal(
 equal(
   "4. no events falls back to createdAt",
   resolveWaitingSince(events: [], viewerLogin: "reviewer-me", createdAt: createdAt), createdAt)
+
+// MARK: - Direct vs team review requests
+
+section("Request kind (drives the direct-only filter)")
+equal(
+  "a pending request naming me is direct",
+  resolveRequestKind(requestedUserLogins: ["reviewer-me"], viewerLogin: "reviewer-me"), .direct)
+equal(
+  "my login among other people's is still direct",
+  resolveRequestKind(
+    requestedUserLogins: ["dev1", "reviewer-me", "dev2"], viewerLogin: "reviewer-me"), .direct)
+equal(
+  "login comparison is case-insensitive",
+  resolveRequestKind(requestedUserLogins: ["Reviewer-ME"], viewerLogin: "reviewer-me"), .direct)
+equal(
+  "only other people named -> team",
+  resolveRequestKind(requestedUserLogins: ["dev1", "dev2"], viewerLogin: "reviewer-me"), .team)
+// Team reviewers carry a name and no login, so they never reach this list. A PR is in the
+// queue only because a request exists, so no user login means a team carries it.
+equal(
+  "no user reviewers -> team",
+  resolveRequestKind(requestedUserLogins: [], viewerLogin: "reviewer-me"), .team)
+equal(
+  "a login that merely contains mine is not mine",
+  resolveRequestKind(requestedUserLogins: ["reviewer-me-2"], viewerLogin: "reviewer-me"), .team)
 
 // MARK: - Threshold override parsing
 
@@ -264,6 +292,14 @@ do {
     check("16201 present", false)
   }
 
+  equal("16135 pending request names me -> direct", find(16135)?.requestKind, .direct)
+  equal("15916 pending request names me -> direct", find(15916)?.requestKind, .direct)
+  equal("16200 team reviewer only -> team", find(16200)?.requestKind, .team)
+  equal("16131 team reviewer only -> team", find(16131)?.requestKind, .team)
+  equal(
+    "fixture splits two direct from four team",
+    result.items.filter { $0.requestKind == .direct }.count, 2)
+
   // The team-routed PR must age even though no event carries my login — the bug that
   // branch 2 exists to prevent.
   if let pr = find(16200) {
@@ -325,8 +361,33 @@ do {
   equal("non-PR node dropped, real PR kept", result.items.count, 1)
   equal("kept PR number", result.items.first?.number, 7)
   check("null avatar tolerated", result.items.first?.authorAvatarURL == nil)
+  equal("absent reviewRequests -> team", result.items.first?.requestKind, .team)
 } catch {
   check("mixed node response decodes", false, "\(error)")
+}
+
+do {
+  // Only `... on User { login }` is selected, so a bot or a team reviewer decodes without
+  // a login. Reading one as a request naming me would defeat the filter.
+  let nonUsers = #"""
+    {"data":{"viewer":{"login":"me"},"search":{"issueCount":1,"nodes":[
+      {"id":"PR_1","number":7,"title":"real","url":"https://github.com/acme/service/pull/7",
+       "isDraft":false,"createdAt":"2026-08-17T10:00:00Z","additions":1,"deletions":2,
+       "changedFiles":3,"repository":{"nameWithOwner":"acme/service"},
+       "author":{"login":"dev","avatarUrl":null},
+       "reviewRequests":{"nodes":[
+         {"requestedReviewer":{"__typename":"Team","name":"me"}},
+         {"requestedReviewer":{"__typename":"Bot"}},
+         {"requestedReviewer":null}
+       ]},
+       "timelineItems":{"nodes":[]}}
+    ]}}}
+    """#
+  let result = try GitHubClient.decode(Data(nonUsers.utf8))
+  equal("a team whose name equals my login is not a direct request",
+    result.items.first?.requestKind, .team)
+} catch {
+  check("non-user reviewer response decodes", false, "\(error)")
 }
 
 // MARK: - Menu bar appearance
@@ -397,6 +458,61 @@ equal(
   appearance(
     nextState(after: loadedEarlier, result: .failure(offline), now: epoch),
     at: epoch.addingTimeInterval(4 * 3600)), .waiting(.urgent))
+
+// MARK: - Direct-requests-only filter
+
+// The filter narrows the whole state, so the rows, the count and the icon colour all read
+// the same queue. These cover the consequences a row-only filter would get wrong.
+section("Direct-requests-only filter")
+let directFresh = item("direct", waitingSince: epoch.addingTimeInterval(-60))
+let teamUrgent = item(
+  "team", waitingSince: epoch.addingTimeInterval(-4 * 3600), requestKind: .team)
+let mixedQueue = LoadState.loaded(
+  items: [teamUrgent, directFresh], at: epoch, refreshError: nil)
+
+equal(
+  "filter off keeps every PR",
+  mixedQueue.showing(directRequestsOnly: false).items.map(\.id), ["team", "direct"])
+equal(
+  "filter on keeps only the PRs naming me",
+  mixedQueue.showing(directRequestsOnly: true).items.map(\.id), ["direct"])
+equal(
+  "filter preserves the oldest-first order",
+  LoadState.loaded(
+    items: [
+      item("a", waitingSince: epoch.addingTimeInterval(-3 * 3600)),
+      item("t", waitingSince: epoch.addingTimeInterval(-2 * 3600), requestKind: .team),
+      item("b", waitingSince: epoch.addingTimeInterval(-60)),
+    ], at: epoch, refreshError: nil
+  ).showing(directRequestsOnly: true).items.map(\.id), ["a", "b"])
+
+// The whole point of narrowing the state rather than the row list: a team PR that aged to
+// red must not keep the menu bar red while the filter hides it.
+equal(
+  "a hidden urgent PR does not colour the icon",
+  appearance(mixedQueue.showing(directRequestsOnly: true)), .waiting(.fresh))
+equal(
+  "the same queue unfiltered still reads urgent",
+  appearance(mixedQueue.showing(directRequestsOnly: false)), .waiting(.urgent))
+equal(
+  "a queue of team PRs only reads as idle under the filter",
+  appearance(
+    LoadState.loaded(items: [teamUrgent], at: epoch, refreshError: nil)
+      .showing(directRequestsOnly: true)), .idle)
+
+// A filtered-to-empty queue must stay distinguishable from a failure, which is what
+// `showing` returning the state's own case preserves.
+equal(
+  "the filter keeps the stale marker and the timestamp",
+  LoadState.loaded(items: [teamUrgent], at: epoch, refreshError: offline)
+    .showing(directRequestsOnly: true),
+  .loaded(items: [], at: epoch, refreshError: offline))
+equal("the filter leaves a failure alone", LoadState.failed(.ghNotFound)
+  .showing(directRequestsOnly: true), .failed(.ghNotFound))
+equal("the filter leaves loading alone", LoadState.loading.showing(directRequestsOnly: true),
+  .loading)
+equal(
+  "the filter leaves never alone", LoadState.never.showing(directRequestsOnly: true), .never)
 
 // MARK: - Error presentation
 

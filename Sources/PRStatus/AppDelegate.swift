@@ -5,7 +5,9 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-  private let model = AppModel(loadItems: ItemSource.resolve())
+  private let model = AppModel(
+    directRequestsOnly: ReviewFilterPreference.directRequestsOnly,
+    loadItems: ItemSource.resolve())
   private var statusItem: NSStatusItem!
   private var popover: NSPopover!
   private var cancellable: AnyCancellable?
@@ -85,8 +87,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     case .failed(let error): stateName = "failed(\(error.title): \(error.hint))"
     }
     let trace =
-      "\(appearance) count=\(count) state=\(stateName) image=\(button.image != nil) "
-      + "title=\"\(button.title)\""
+      "\(appearance) count=\(count) directOnly=\(model.directRequestsOnly) "
+      + "state=\(stateName) image=\(button.image != nil) title=\"\(button.title)\""
     guard trace != lastTrace else { return }
     lastTrace = trace
     let stamp = Date().formatted(date: .omitted, time: .standard)
@@ -109,7 +111,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     case .loaded(let items, let at, let refreshError):
       let stale = refreshError.map { "\($0.title.lowercased()) — showing \(formatAsOfTime(at))" }
       guard let oldest = items.first else {
-        return stale ?? "nothing waiting on you"
+        // The hollow circle now has two causes, and this is the only place to tell them
+        // apart without opening the popover.
+        let hidden = model.hiddenCount
+        let empty =
+          hidden > 0
+          ? "nothing waiting on you (\(hidden) team \(hidden == 1 ? "PR" : "PRs") hidden)"
+          : "nothing waiting on you"
+        return stale ?? empty
       }
       let summary =
         "\(items.count) waiting on your review, "
