@@ -119,6 +119,11 @@ to see every member ranked least loaded first: how many PRs name each of them, h
 the oldest has waited, and a bar for comparing at a glance. Click a row to open that
 person's requests on GitHub.
 
+The count and the bar are coloured by **load, not age**: green, yellow and red are thirds
+of the busiest member's count, with a floor of three so a lone request never reads as
+heavy. The queue colours its rows by how long they have waited; here the question is who
+is free, so the colour answers that and the wait stays in the text.
+
 | | |
 |:--:|:--:|
 | <img src="docs/lookup-team.png" width="330" alt="The Look up pane showing a team of five, each member with a count of PRs waiting on them, the age of the oldest, and a bar"> | <img src="docs/lookup-user.png" width="330" alt="The Look up pane showing one person with three PRs waiting, the oldest for a day"> |
@@ -213,7 +218,7 @@ swift build --product SelfTest && ./.build/debug/SelfTest
 ```
 
 `swift test` **cannot run here**: the Command Line Tools ship neither XCTest nor
-swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 184
+swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 191
 checks over threshold boundaries, the wait-time cascade, the direct-versus-team split,
 response decoding, duration formatting, menu bar appearance, fetch-outcome transitions,
 error presentation, lookup parsing, reviewer ranking, the active-versus-dormant split

@@ -100,7 +100,7 @@ private struct ReviewerView: View {
         help: "Open \(load.reviewer.login)'s review requests on GitHub",
         onTap: { onOpen(reviewQueueURL(login: load.reviewer.login)) },
         leading: { Avatar(url: load.reviewer.avatarURL, size: 26) },
-        trailing: { LoadLabel(load: load, now: now, thresholds: thresholds) })
+        trailing: { LoadLabel(load: load, now: now) })
       Divider()
       if load.active.isEmpty {
         Notice(
@@ -179,8 +179,7 @@ private struct TeamView: View {
         VStack(spacing: 0) {
           ForEach(team.members) { load in
             MemberRow(
-              load: load, maxCount: team.members.map(\.activeCount).max() ?? 0,
-              now: now, thresholds: thresholds
+              load: load, scale: team.members.map(\.activeCount).max() ?? 0, now: now
             ) {
               onOpen(reviewQueueURL(login: load.reviewer.login))
             }
@@ -216,19 +215,13 @@ private struct TeamGlyph: View {
 /// long, with a bar so the whole team compares at a glance.
 private struct MemberRow: View {
   let load: ReviewerLoad
-  let maxCount: Int
+  let scale: Int
   let now: Date
-  let thresholds: UrgencyThresholds
   let onTap: () -> Void
 
   @State private var isHovering = false
 
-  private var tint: Color {
-    guard let urgency = load.urgency(now: now, thresholds: thresholds) else {
-      return Color.secondary.opacity(0.4)
-    }
-    return Color(StatusIcon.color(for: urgency))
-  }
+  private var tint: Color { loadTint(load, scale: scale) }
 
   private var detail: String {
     var parts: [String] = []
@@ -256,7 +249,7 @@ private struct MemberRow: View {
             .lineLimit(1)
         }
         Spacer(minLength: 8)
-        LoadBar(count: load.activeCount, maxCount: maxCount, tint: tint)
+        LoadBar(count: load.activeCount, scale: scale, tint: tint)
         Text("\(load.activeCount)")
           .font(.system(size: 13, weight: .semibold, design: .rounded))
           .monospacedDigit()
@@ -275,11 +268,19 @@ private struct MemberRow: View {
   }
 }
 
+/// Grey when nothing is active; otherwise the load colour on the same scale as the bar.
+private func loadTint(_ load: ReviewerLoad, scale: Int) -> Color {
+  guard let level = LoadLevel(activeCount: load.activeCount, scale: scale) else {
+    return Color.secondary.opacity(0.4)
+  }
+  return Color(StatusIcon.color(for: level))
+}
+
 /// Proportional to the busiest member, so the bars answer "compared to whom?" rather than
 /// an absolute scale nobody has in mind.
 private struct LoadBar: View {
   let count: Int
-  let maxCount: Int
+  let scale: Int
   let tint: Color
 
   private let width: CGFloat = 72
@@ -287,22 +288,21 @@ private struct LoadBar: View {
   var body: some View {
     ZStack(alignment: .leading) {
       Capsule().fill(Color.secondary.opacity(0.12))
-      if count > 0, maxCount > 0 {
+      if count > 0, scale > 0 {
         Capsule()
           .fill(tint)
-          .frame(width: max(6, width * CGFloat(count) / CGFloat(maxCount)))
+          .frame(width: max(6, width * CGFloat(count) / CGFloat(scale)))
       }
     }
     .frame(width: width, height: 5)
   }
 }
 
-/// The active count and the longest active wait for one person, coloured like the menu
-/// bar circle, with the dormant count beside the wait.
+/// The active count and the longest active wait for one person, with the dormant count
+/// beside the wait. Alone on screen, the count is coloured against the scale floor.
 private struct LoadLabel: View {
   let load: ReviewerLoad
   let now: Date
-  let thresholds: UrgencyThresholds
 
   private var secondLine: String {
     var parts: [String] = []
@@ -313,10 +313,10 @@ private struct LoadLabel: View {
 
   var body: some View {
     VStack(alignment: .trailing, spacing: 2) {
-      if let urgency = load.urgency(now: now, thresholds: thresholds) {
+      if load.activeCount > 0 {
         Text(load.activeCount == 1 ? "1 active" : "\(load.activeCount) active")
           .font(.system(size: 12, weight: .semibold))
-          .foregroundStyle(Color(StatusIcon.color(for: urgency)))
+          .foregroundStyle(loadTint(load, scale: load.activeCount))
       } else {
         Text("nothing active")
           .font(.system(size: 12, weight: .semibold))

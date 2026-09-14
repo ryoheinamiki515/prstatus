@@ -28,6 +28,15 @@ enum StatusIcon {
     }
   }
 
+  /// The same three colours, read as load rather than age.
+  static func color(for level: LoadLevel) -> NSColor {
+    switch level {
+    case .light: return .systemGreen
+    case .moderate: return .systemYellow
+    case .heavy: return .systemRed
+    }
+  }
+
   private static func art(for appearance: StatusAppearance) -> (symbol: String, label: String) {
     switch appearance {
     case .unknown:

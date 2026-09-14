@@ -116,13 +116,33 @@ public struct ReviewerLoad: Equatable, Sendable, Identifiable {
 
   public func oldestAge(now: Date) -> TimeInterval? { active.first?.age(now: now) }
 
-  /// How overdue the longest active wait is; nil when nothing active is waiting.
-  public func urgency(now: Date, thresholds: UrgencyThresholds) -> Urgency? {
-    worstUrgency(of: active, now: now, thresholds: thresholds)
-  }
-
   public func withItems(_ items: [PullRequestItem], asOf now: Date) -> ReviewerLoad {
     ReviewerLoad(reviewer: reviewer, requestedCount: requestedCount, items: items, asOf: now)
+  }
+}
+
+/// How loaded one reviewer is next to the busiest one on the same screen. The scale is cut
+/// in thirds, with a floor of three so a lone request never reads as heavy. Unlike the
+/// queue's colours this says nothing about age: the pane's question is who is free, and
+/// the wait stays in the text.
+public enum LoadLevel: Equatable, Sendable {
+  case light
+  case moderate
+  case heavy
+
+  public static let scaleFloor = 3
+
+  /// nil when nothing is active. `scale` is the largest active count on screen.
+  public init?(activeCount: Int, scale: Int) {
+    guard activeCount > 0 else { return nil }
+    let scale = max(scale, Self.scaleFloor, activeCount)
+    if activeCount * 3 <= scale {
+      self = .light
+    } else if activeCount * 3 <= 2 * scale {
+      self = .moderate
+    } else {
+      self = .heavy
+    }
   }
 }
 

@@ -654,18 +654,26 @@ let split = ReviewerLoad(
 equal("active keeps only the moving PRs", split.active.map(\.id), ["t"])
 equal("dormant is the total less the active, so it covers PRs past the page", split.dormantCount, 4)
 equal("the oldest wait is read from the active PRs only", split.oldestWaitingSince, touchedToday.waitingSince)
-equal(
-  "a long-waiting but active PR still colours the person",
-  split.urgency(now: epoch, thresholds: standard), .urgent)
 let allDormant = ReviewerLoad(
   reviewer: profile("y"), requestedCount: 2, items: [untouched], asOf: epoch)
-check("only dormant PRs -> no urgency, nothing active", allDormant.urgency(now: epoch, thresholds: standard) == nil && allDormant.activeCount == 0)
+check(
+  "only dormant PRs -> nothing active and no oldest wait",
+  allDormant.activeCount == 0 && allDormant.oldestAge(now: epoch) == nil)
 equal("dormant never goes negative when the page outruns the total", ReviewerLoad(
   reviewer: profile("z"), requestedCount: 0, items: [touchedToday], asOf: epoch).dormantCount, 0)
-check("nothing waiting -> nil urgency", idle.urgency(now: epoch, thresholds: standard) == nil)
-equal(
-  "urgency follows the oldest request", oneOld.urgency(now: epoch, thresholds: standard),
-  .urgent)
+
+section("Load level (the lookup pane's colour)")
+check("nothing active -> no level", LoadLevel(activeCount: 0, scale: 9) == nil)
+equal("one of three -> light", LoadLevel(activeCount: 1, scale: 3), .light)
+equal("two of three -> moderate", LoadLevel(activeCount: 2, scale: 3), .moderate)
+equal("three of three -> heavy", LoadLevel(activeCount: 3, scale: 3), .heavy)
+// The floor: the only loaded person on a team of idle people has one request, not a heavy load.
+equal("a lone request is light even when it is the team's maximum", LoadLevel(activeCount: 1, scale: 1), .light)
+equal("two alone -> moderate, by the floor", LoadLevel(activeCount: 2, scale: 2), .moderate)
+equal("scale 6: two -> light", LoadLevel(activeCount: 2, scale: 6), .light)
+equal("scale 6: four sits exactly on the boundary -> moderate", LoadLevel(activeCount: 4, scale: 6), .moderate)
+equal("scale 6: five -> heavy", LoadLevel(activeCount: 5, scale: 6), .heavy)
+equal("a count above the scale is clamped, not undefined", LoadLevel(activeCount: 8, scale: 6), .heavy)
 equal(
   "items are kept oldest first however they arrive",
   ReviewerLoad(
