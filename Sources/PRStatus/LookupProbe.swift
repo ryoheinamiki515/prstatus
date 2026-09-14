@@ -47,7 +47,8 @@ enum LookupProbe {
   }
 
   private static func describe(_ load: ReviewerLoad, now: Date) -> String {
-    guard let age = load.oldestAge(now: now) else { return "0" }
-    return "\(load.requestedCount), oldest \(formatWaitingDuration(age))"
+    let dormant = load.dormantCount == 0 ? "" : ", \(load.dormantCount) dormant"
+    guard let age = load.oldestAge(now: now) else { return "0 active\(dormant)" }
+    return "\(load.activeCount) active, oldest \(formatWaitingDuration(age))\(dormant)"
   }
 }

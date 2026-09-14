@@ -22,7 +22,11 @@ struct DataSource {
     let launchedAt = Date()
     return DataSource(
       queue: { try fixtures.queueItems().map { $0.withWaitingSince(launchedAt) } },
-      lookup: { try fixtures.lookup($0).mapItems { $0.withWaitingSince(launchedAt) } })
+      lookup: {
+        try fixtures.lookup($0).mapItems(asOf: launchedAt) {
+          $0.withWaitingSince(launchedAt).withUpdatedAt(launchedAt)
+        }
+      })
   }
 }
 
@@ -42,13 +46,14 @@ struct FixtureStore {
   func lookup(_ target: LookupTarget) throws -> LookupResult {
     switch target {
     case .user(let login):
-      return try GitHubClient.decodeUserLookup(read("lookup-user.json"), login: login)
+      return try GitHubClient.decodeUserLookup(
+        read("lookup-user.json"), login: login, asOf: Date())
     case .team:
       guard let roster = try GitHubClient.decodeTeam(read("lookup-team.json")) else {
         return .notFound(target)
       }
       let members = try GitHubClient.decodeLoads(
-        read("lookup-team-load.json"), members: roster.members)
+        read("lookup-team-load.json"), members: roster.members, asOf: Date())
       return .team(TeamLoad(roster: roster, members: members))
     }
   }

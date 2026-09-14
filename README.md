@@ -129,9 +129,17 @@ same split the Direct only filter makes. A PR requested from the team itself sit
 member's queue alike, so it says nothing about whom to pick; the header reports those
 once instead of adding them to each row.
 
-The ranking puts the fewest requests first. Among equals, the person whose oldest request
-is newest is less behind. Nothing waiting ranks above anything waiting, and ties fall back
-to login so the order holds still between refreshes.
+A request also has to be **active**. A PR nobody has touched for three days is assigned
+but not being reviewed, so it says little about the person's time; the pane calls it
+dormant, counts it beside the active number, and leaves it out of the ranking and the
+colour. The three days are measured from GitHub's `updatedAt`, so a bot comment does keep
+a PR active — the opposite trade from the wait-time clock, and the right one here, since
+the question is whether anything is happening.
+
+The ranking puts the fewest active requests first. Among equals, the person whose oldest
+active request is newest is less behind. Nothing waiting ranks above anything waiting,
+fewer dormant requests break the next tie, and login the last, so the order holds still
+between refreshes.
 
 A person costs one request. A team costs one request for the roster, then one search per
 member, six to a request, run concurrently. GitHub runs the searches inside a request one
@@ -205,11 +213,11 @@ swift build --product SelfTest && ./.build/debug/SelfTest
 ```
 
 `swift test` **cannot run here**: the Command Line Tools ship neither XCTest nor
-swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 168
+swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 184
 checks over threshold boundaries, the wait-time cascade, the direct-versus-team split,
 response decoding, duration formatting, menu bar appearance, fetch-outcome transitions,
-error presentation, lookup parsing, reviewer ranking and the not-found-versus-failure
-split. It is not a framework: no fixture isolation, no parameterisation, and
+error presentation, lookup parsing, reviewer ranking, the active-versus-dormant split
+and the not-found-versus-failure split. It is not a framework: no fixture isolation, no parameterisation, and
 it covers `PRStatusCore` only. The AppKit and SwiftUI layer is checked with
 `PRSTATUS_RENDER`.
 
@@ -241,8 +249,9 @@ every colour.
 
 - The menu bar tracks only PRs where review is **requested of you** — not `assignee`, not
   PRs you authored.
-- A team's roster is cut at 100 members, and a person's oldest wait is read from their
-  first 30 PRs, oldest-created first.
+- A team's roster is cut at 100 members. A person's PRs are read 30 at a time, most
+  recently updated first, so past 30 the active ones are all present and only dormant
+  ones are counted without being seen.
 - Thresholds are fixed at 1 and 3 hours unless overridden by environment variable.
 - Ad-hoc signed. Gatekeeper will need convincing if the bundle is moved between machines.
 - No app icon artwork, no auto-update, no notifications.

@@ -61,6 +61,8 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
   public let authorLogin: String
   public let authorAvatarURL: URL?
   public let isDraft: Bool
+  /// GitHub's last-activity stamp: any comment, push or review moves it.
+  public let updatedAt: Date
   public let additions: Int
   public let deletions: Int
   public let changedFiles: Int
@@ -71,7 +73,7 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
 
   public init(
     id: String, number: Int, title: String, url: URL, repository: String,
-    authorLogin: String, authorAvatarURL: URL?, isDraft: Bool,
+    authorLogin: String, authorAvatarURL: URL?, isDraft: Bool, updatedAt: Date,
     additions: Int, deletions: Int, changedFiles: Int,
     requestKind: ReviewRequestKind, waitingSince: Date
   ) {
@@ -83,6 +85,7 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
     self.authorLogin = authorLogin
     self.authorAvatarURL = authorAvatarURL
     self.isDraft = isDraft
+    self.updatedAt = updatedAt
     self.additions = additions
     self.deletions = deletions
     self.changedFiles = changedFiles
@@ -101,8 +104,25 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
     PullRequestItem(
       id: id, number: number, title: title, url: url, repository: repository,
       authorLogin: authorLogin, authorAvatarURL: authorAvatarURL, isDraft: isDraft,
-      additions: additions, deletions: deletions, changedFiles: changedFiles,
-      requestKind: requestKind, waitingSince: date)
+      updatedAt: updatedAt, additions: additions, deletions: deletions,
+      changedFiles: changedFiles, requestKind: requestKind, waitingSince: date)
+  }
+
+  /// Same PR, different last activity.
+  public func withUpdatedAt(_ date: Date) -> PullRequestItem {
+    PullRequestItem(
+      id: id, number: number, title: title, url: url, repository: repository,
+      authorLogin: authorLogin, authorAvatarURL: authorAvatarURL, isDraft: isDraft,
+      updatedAt: date, additions: additions, deletions: deletions,
+      changedFiles: changedFiles, requestKind: requestKind, waitingSince: waitingSince)
+  }
+
+  /// Nothing has happened on the PR for this long. Somebody is still requested, but the
+  /// request is not being worked, so it says little about how busy they are.
+  public static let dormantAfter: TimeInterval = 3 * 86400
+
+  public func isDormant(asOf now: Date) -> Bool {
+    now.timeIntervalSince(updatedAt) > Self.dormantAfter
   }
 
   public func age(now: Date) -> TimeInterval {

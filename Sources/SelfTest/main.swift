@@ -57,8 +57,8 @@ func item(
   PullRequestItem(
     id: id, number: 1, title: "t", url: URL(string: "https://example.com")!,
     repository: "acme/service", authorLogin: "dev", authorAvatarURL: nil, isDraft: false,
-    additions: 0, deletions: 0, changedFiles: 0, requestKind: requestKind,
-    waitingSince: waitingSince)
+    updatedAt: waitingSince, additions: 0, deletions: 0, changedFiles: 0,
+    requestKind: requestKind, waitingSince: waitingSince)
 }
 
 section("Aggregate urgency (drives the menu bar circle)")
@@ -100,7 +100,8 @@ check(
   PullRequestItem(
     id: "x", number: 16062, title: "t", url: URL(string: "https://example.com")!,
     repository: "acme/service", authorLogin: "dev", authorAvatarURL: nil, isDraft: false,
-    additions: 0, deletions: 0, changedFiles: 0, requestKind: .direct, waitingSince: epoch
+    updatedAt: epoch, additions: 0, deletions: 0, changedFiles: 0, requestKind: .direct,
+    waitingSince: epoch
   ).reference == "acme/service #16062",
   "thousands separator must not appear in a PR number")
 
@@ -601,29 +602,66 @@ section("Ranking by availability (least loaded first)")
 func profile(_ login: String) -> ReviewerProfile {
   ReviewerProfile(login: login, name: nil, avatarURL: nil)
 }
+/// `count` requests in total; one active item at `oldest` ago when given, the rest dormant.
 func load(_ login: String, _ count: Int, oldest: TimeInterval?) -> ReviewerLoad {
   ReviewerLoad(
     reviewer: profile(login), requestedCount: count,
-    items: oldest.map { [item(login, waitingSince: epoch.addingTimeInterval(-$0))] } ?? [])
+    items: oldest.map { [item(login, waitingSince: epoch.addingTimeInterval(-$0))] } ?? [],
+    asOf: epoch)
 }
+let dormantAge = PullRequestItem.dormantAfter + 60
 let idle = load("zed", 0, oldest: nil)
 let oneRecent = load("amy", 1, oldest: 3600)
 let oneOld = load("bob", 1, oldest: 5 * 3600)
 let busy = load("cat", 4, oldest: 60)
 
+// `busy` has four requests but only one active item, so it ranks by that one.
 equal(
-  "fewest requests first",
-  rankByAvailability([busy, oneOld, oneRecent, idle]).map(\.id), ["zed", "amy", "bob", "cat"])
+  "fewest active requests first",
+  rankByAvailability([busy, oneOld, oneRecent, idle]).map(\.id), ["zed", "cat", "amy", "bob"])
+let fourActive = ReviewerLoad(
+  reviewer: profile("dan"), requestedCount: 4,
+  items: (1...4).map { item("dan\($0)", waitingSince: epoch.addingTimeInterval(-60 * Double($0))) },
+  asOf: epoch)
 equal(
   "count outranks age: four fresh requests still sit below one old one",
-  rankByAvailability([busy, oneOld]).map(\.id), ["bob", "cat"])
+  rankByAvailability([fourActive, oneOld]).map(\.id), ["bob", "dan"])
 equal(
   "among equal counts the shorter longest-wait ranks higher",
   rankByAvailability([oneOld, oneRecent]).map(\.id), ["amy", "bob"])
 equal(
+  "fewer dormant requests break a tie on active ones",
+  rankByAvailability([load("bob", 3, oldest: nil), load("amy", 1, oldest: nil)]).map(\.id),
+  ["amy", "bob"])
+equal(
   "full ties fall back to login, case-insensitively",
   rankByAvailability([load("bob", 0, oldest: nil), load("Amy", 0, oldest: nil)]).map(\.id),
   ["Amy", "bob"])
+
+section("Active versus dormant")
+let touchedToday = item("t", waitingSince: epoch.addingTimeInterval(-5 * 86400))
+  .withUpdatedAt(epoch.addingTimeInterval(-3600))
+let untouched = item("u", waitingSince: epoch.addingTimeInterval(-3600))
+  .withUpdatedAt(epoch.addingTimeInterval(-dormantAge))
+check("activity within three days -> active", !touchedToday.isDormant(asOf: epoch))
+check("no activity for over three days -> dormant", untouched.isDormant(asOf: epoch))
+check(
+  "exactly three days is still active",
+  !item("x", waitingSince: epoch).withUpdatedAt(epoch.addingTimeInterval(-PullRequestItem.dormantAfter))
+    .isDormant(asOf: epoch))
+let split = ReviewerLoad(
+  reviewer: profile("x"), requestedCount: 5, items: [untouched, touchedToday], asOf: epoch)
+equal("active keeps only the moving PRs", split.active.map(\.id), ["t"])
+equal("dormant is the total less the active, so it covers PRs past the page", split.dormantCount, 4)
+equal("the oldest wait is read from the active PRs only", split.oldestWaitingSince, touchedToday.waitingSince)
+equal(
+  "a long-waiting but active PR still colours the person",
+  split.urgency(now: epoch, thresholds: standard), .urgent)
+let allDormant = ReviewerLoad(
+  reviewer: profile("y"), requestedCount: 2, items: [untouched], asOf: epoch)
+check("only dormant PRs -> no urgency, nothing active", allDormant.urgency(now: epoch, thresholds: standard) == nil && allDormant.activeCount == 0)
+equal("dormant never goes negative when the page outruns the total", ReviewerLoad(
+  reviewer: profile("z"), requestedCount: 0, items: [touchedToday], asOf: epoch).dormantCount, 0)
 check("nothing waiting -> nil urgency", idle.urgency(now: epoch, thresholds: standard) == nil)
 equal(
   "urgency follows the oldest request", oneOld.urgency(now: epoch, thresholds: standard),
@@ -635,7 +673,7 @@ equal(
     items: [
       item("new", waitingSince: epoch.addingTimeInterval(-60)),
       item("old", waitingSince: epoch.addingTimeInterval(-3600)),
-    ]
+    ], asOf: epoch
   ).items.map(\.id), ["old", "new"])
 let roster = TeamRoster(
   slug: "acme/x", name: "x", memberCount: 2, members: [profile("cat"), profile("zed")],
@@ -643,19 +681,33 @@ let roster = TeamRoster(
 equal(
   "TeamLoad ranks on construction",
   TeamLoad(roster: roster, members: [busy, idle]).members.map(\.id), ["zed", "cat"])
+func memberOrder(_ result: LookupResult) -> [String] {
+  if case .team(let team) = result { return team.members.map(\.id) }
+  return []
+}
 equal(
   "mapItems re-ranks, because the oldest wait is part of the order",
-  LookupResult.team(TeamLoad(roster: roster, members: [oneRecent, oneOld]))
-    .mapItems { $0.id == "amy" ? $0.withWaitingSince(epoch.addingTimeInterval(-9 * 3600)) : $0 },
-  .team(
-    TeamLoad(
-      roster: roster,
-      members: [
-        load("amy", 1, oldest: 9 * 3600), oneOld,
-      ])))
+  memberOrder(
+    LookupResult.team(TeamLoad(roster: roster, members: [oneRecent, oneOld]))
+      .mapItems(asOf: epoch) {
+        $0.id == "amy" ? $0.withWaitingSince(epoch.addingTimeInterval(-9 * 3600)) : $0
+      }),
+  ["bob", "amy"])
+equal(
+  "mapItems re-splits, because dormancy depends on the clocks",
+  LookupResult.user(oneOld)
+    .mapItems(asOf: epoch) { $0.withUpdatedAt(epoch.addingTimeInterval(-dormantAge)) },
+  .user(
+    ReviewerLoad(
+      reviewer: profile("bob"), requestedCount: 1,
+      items: [
+        item("bob", waitingSince: epoch.addingTimeInterval(-5 * 3600))
+          .withUpdatedAt(epoch.addingTimeInterval(-dormantAge))
+      ], asOf: epoch)))
 check(
   "mapItems leaves not-found alone",
-  LookupResult.notFound(.user(login: "x")).mapItems { $0 } == .notFound(.user(login: "x")))
+  LookupResult.notFound(.user(login: "x")).mapItems(asOf: epoch) { $0 }
+    == .notFound(.user(login: "x")))
 
 // MARK: - Lookup decoding
 
@@ -664,14 +716,22 @@ func fixture(_ name: String) throws -> Data {
   try Data(contentsOf: packageRoot.appendingPathComponent("Fixtures/\(name)"))
 }
 
+// The lookup fixtures were captured on 2026-09-14; reading them as of that evening keeps
+// the active-versus-dormant split the same on any day the tests run.
+let captured = date("2026-09-14T18:00:00Z")
+
 do {
-  let result = try GitHubClient.decodeUserLookup(fixture("lookup-user.json"), login: "dev1")
+  let result = try GitHubClient.decodeUserLookup(
+    fixture("lookup-user.json"), login: "dev1", asOf: captured)
   if case .user(let load) = result {
     equal("user login", load.reviewer.login, "dev1")
     equal("user display name", load.reviewer.name, "Dev One")
     check("user avatar parsed", load.reviewer.avatarURL != nil)
     equal("user requested count", load.requestedCount, 3)
     equal("user items", load.items.count, 3)
+    equal("user active: one PR touched today", load.active.map(\.number), [17496])
+    equal("user dormant: two untouched for days", load.dormantCount, 2)
+    equal("updatedAt decoded", load.items.first?.updatedAt, date("2026-09-08T23:47:15Z"))
     check(
       "user items are oldest first",
       load.items.map(\.waitingSince) == load.items.map(\.waitingSince).sorted())
@@ -696,26 +756,32 @@ do {
     check("a member without a display name decodes", roster.members[3].name == nil)
     equal("PRs requested from the team itself", roster.teamRequestedCount, 5)
 
-    let loads = try GitHubClient.decodeLoads(fixture("lookup-team-load.json"), members: roster.members)
+    let loads = try GitHubClient.decodeLoads(
+      fixture("lookup-team-load.json"), members: roster.members, asOf: captured)
     equal("one load per member", loads.map(\.reviewer.login), roster.members.map(\.login))
     equal("per-member counts", loads.map(\.requestedCount), [0, 3, 2, 7, 0])
+    equal("per-member active counts", loads.map(\.activeCount), [0, 1, 1, 3, 0])
+    equal("per-member dormant counts", loads.map(\.dormantCount), [0, 2, 1, 4, 0])
     check(
       "every load's items fit its count",
       loads.allSatisfy { $0.items.count <= $0.requestedCount })
     check(
       "a member with nothing waiting has no oldest wait",
       loads[0].oldestWaitingSince == nil && loads[4].oldestWaitingSince == nil)
+    // dev1 and reviewer-me both have one active PR; dev1's was requested later, so dev1 is
+    // less behind, even though dev1 has more requests in total.
     equal(
-      "the team ranks least loaded first, ties by login",
+      "the team ranks by active load, ties by the newer oldest wait, then login",
       TeamLoad(roster: roster, members: loads).members.map(\.id),
-      ["dev2", "dev3", "reviewer-me", "dev1", "dev4"])
+      ["dev2", "dev3", "dev1", "reviewer-me", "dev4"])
 
     let tooMany = roster.members + [profile("dev9")]
     check(
       "a roster longer than the response is a failure, not a silent zero",
       {
         do {
-          _ = try GitHubClient.decodeLoads(fixture("lookup-team-load.json"), members: tooMany)
+          _ = try GitHubClient.decodeLoads(
+            fixture("lookup-team-load.json"), members: tooMany, asOf: captured)
           return false
         } catch let error as GitHubClientError {
           if case .api = error { return true }
@@ -746,7 +812,7 @@ let missingUser = #"""
   """#
 equal(
   "an unknown user decodes to .notFound",
-  try? GitHubClient.decodeUserLookup(Data(missingUser.utf8), login: "nobody"),
+  try? GitHubClient.decodeUserLookup(Data(missingUser.utf8), login: "nobody", asOf: epoch),
   .notFound(.user(login: "nobody")))
 let missingOrg = #"""
   {"data":{"organization":null,"search":{"issueCount":0}},

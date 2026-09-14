@@ -46,9 +46,10 @@ extension GitHubClient {
 
   /// `user-review-requested:` matches only requests naming the login, not those routed
   /// through a team — the same split as the viewer's Direct only filter, made by GitHub.
-  /// Oldest-created first, so the page that is cut at 30 skews toward the longest waits.
+  /// Most recently updated first, so when the page is cut at 30 every active PR is on it
+  /// and only dormant ones fall off; `ReviewerLoad` counts those from the total.
   static func requestedSearch(login: String) -> String {
-    "is:open is:pr user-review-requested:\(login) archived:false sort:created-asc"
+    "is:open is:pr user-review-requested:\(login) archived:false sort:updated-desc"
   }
 
   static func teamRequestedSearch(slug: String) -> String {
@@ -65,7 +66,7 @@ extension GitHubClient {
         Self.userLookupQuery,
         variables: ["login": login, "q": Self.requestedSearch(login: login)],
         token: token)
-      return try Self.decodeUserLookup(data, login: login)
+      return try Self.decodeUserLookup(data, login: login, asOf: Date())
 
     case .team(let organization, let slug):
       let data = try await Self.post(
@@ -77,13 +78,13 @@ extension GitHubClient {
         ],
         token: token)
       guard let roster = try Self.decodeTeam(data) else { return .notFound(target) }
-      let members = try await Self.fetchLoads(of: roster.members, token: token)
+      let members = try await Self.fetchLoads(of: roster.members, token: token, asOf: Date())
       return .team(TeamLoad(roster: roster, members: members))
     }
   }
 
-  static func fetchLoads(of members: [ReviewerProfile], token: String) async throws
-    -> [ReviewerLoad]
+  static func fetchLoads(of members: [ReviewerProfile], token: String, asOf now: Date)
+    async throws -> [ReviewerLoad]
   {
     let batches = stride(from: 0, to: members.count, by: loadBatchSize).map { start in
       Array(members[start..<min(start + loadBatchSize, members.count)])
@@ -97,7 +98,7 @@ extension GitHubClient {
           }
           let data = try await post(
             loadQuery(memberCount: batch.count), variables: variables, token: token)
-          return (index, try decodeLoads(data, members: batch))
+          return (index, try decodeLoads(data, members: batch, asOf: now))
         }
       }
       var loads = [[ReviewerLoad]](repeating: [], count: batches.count)
@@ -108,7 +109,11 @@ extension GitHubClient {
 
   // MARK: - Decode
 
-  public static func decodeUserLookup(_ data: Data, login: String) throws -> LookupResult {
+  /// `now` fixes the active-versus-dormant split, so a fixture decodes the same way on any
+  /// day.
+  public static func decodeUserLookup(_ data: Data, login: String, asOf now: Date) throws
+    -> LookupResult
+  {
     guard case .found(let payload) = try unwrap(UserLookupPayload.self, from: data),
       let user = payload.user
     else { return .notFound(.user(login: login)) }
@@ -116,7 +121,8 @@ extension GitHubClient {
       ReviewerLoad(
         reviewer: user.profile,
         requestedCount: payload.search.issueCount,
-        items: payload.search.items(for: user.login)))
+        items: payload.search.items(for: user.login),
+        asOf: now))
   }
 
   /// nil when the organization or the team does not exist. An unknown organization comes
@@ -133,8 +139,8 @@ extension GitHubClient {
       teamRequestedCount: payload.search.issueCount)
   }
 
-  public static func decodeLoads(_ data: Data, members: [ReviewerProfile]) throws
-    -> [ReviewerLoad]
+  public static func decodeLoads(_ data: Data, members: [ReviewerProfile], asOf now: Date)
+    throws -> [ReviewerLoad]
   {
     guard case .found(let searches) = try unwrap([String: Search].self, from: data) else {
       throw GitHubClientError.api("GitHub could not resolve a member's review requests.")
@@ -146,7 +152,8 @@ extension GitHubClient {
       return ReviewerLoad(
         reviewer: member,
         requestedCount: search.issueCount,
-        items: search.items(for: member.login))
+        items: search.items(for: member.login),
+        asOf: now)
     }
   }
 

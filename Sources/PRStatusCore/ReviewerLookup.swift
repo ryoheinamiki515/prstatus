@@ -80,33 +80,49 @@ public struct ReviewerProfile: Equatable, Sendable, Identifiable {
 
 /// The PRs whose pending review requests name one person — the same question the menu
 /// bar answers for the viewer, asked about somebody else.
+///
+/// Split at construction into active and dormant, as of the fetch: a PR nobody has touched
+/// for `PullRequestItem.dormantAfter` is assigned but not being reviewed, so only the
+/// active ones measure how busy the person is.
 public struct ReviewerLoad: Equatable, Sendable, Identifiable {
   public let reviewer: ReviewerProfile
-  /// The search's total. `items` holds only the first page, so this can be larger.
+  /// The search's total, active and dormant together. `items` holds only the first page,
+  /// so this can be larger.
   public let requestedCount: Int
   /// Oldest first, with each clock resolved for `reviewer` rather than for the viewer.
   public let items: [PullRequestItem]
+  /// The items still moving, oldest first.
+  public let active: [PullRequestItem]
+  /// Everything requested that is not active. Exact even past the first page, because the
+  /// page is the most recently updated PRs, so the ones it cuts are dormant.
+  public let dormantCount: Int
 
   public var id: String { reviewer.login }
 
-  public init(reviewer: ReviewerProfile, requestedCount: Int, items: [PullRequestItem]) {
+  public init(
+    reviewer: ReviewerProfile, requestedCount: Int, items: [PullRequestItem], asOf now: Date
+  ) {
     self.reviewer = reviewer
     self.requestedCount = requestedCount
     self.items = items.oldestFirst()
+    self.active = self.items.filter { !$0.isDormant(asOf: now) }
+    self.dormantCount = max(0, requestedCount - active.count)
   }
 
-  /// nil when nothing is waiting on this person.
-  public var oldestWaitingSince: Date? { items.first?.waitingSince }
+  public var activeCount: Int { active.count }
 
-  public func oldestAge(now: Date) -> TimeInterval? { items.first?.age(now: now) }
+  /// nil when nothing active is waiting on this person.
+  public var oldestWaitingSince: Date? { active.first?.waitingSince }
 
-  /// How overdue the longest wait is; nil when nothing is waiting.
+  public func oldestAge(now: Date) -> TimeInterval? { active.first?.age(now: now) }
+
+  /// How overdue the longest active wait is; nil when nothing active is waiting.
   public func urgency(now: Date, thresholds: UrgencyThresholds) -> Urgency? {
-    worstUrgency(of: items, now: now, thresholds: thresholds)
+    worstUrgency(of: active, now: now, thresholds: thresholds)
   }
 
-  public func withItems(_ items: [PullRequestItem]) -> ReviewerLoad {
-    ReviewerLoad(reviewer: reviewer, requestedCount: requestedCount, items: items)
+  public func withItems(_ items: [PullRequestItem], asOf now: Date) -> ReviewerLoad {
+    ReviewerLoad(reviewer: reviewer, requestedCount: requestedCount, items: items, asOf: now)
   }
 }
 
@@ -147,13 +163,14 @@ public struct TeamLoad: Equatable, Sendable {
   }
 }
 
-/// Fewest pending requests first. Among equals, the person whose oldest request is newest
-/// is less behind, so they rank higher; nothing waiting ranks above anything waiting.
-/// Login breaks the last tie so the order is stable between refreshes.
+/// Fewest active requests first. Among equals, the person whose oldest active request is
+/// newest is less behind, so they rank higher; nothing waiting ranks above anything
+/// waiting. Dormant requests break the next tie, then login, so the order is stable
+/// between refreshes.
 public func rankByAvailability(_ loads: [ReviewerLoad]) -> [ReviewerLoad] {
   loads.sorted { lhs, rhs in
-    if lhs.requestedCount != rhs.requestedCount {
-      return lhs.requestedCount < rhs.requestedCount
+    if lhs.activeCount != rhs.activeCount {
+      return lhs.activeCount < rhs.activeCount
     }
     switch (lhs.oldestWaitingSince, rhs.oldestWaitingSince) {
     case (nil, nil): break
@@ -161,6 +178,9 @@ public func rankByAvailability(_ loads: [ReviewerLoad]) -> [ReviewerLoad] {
     case (_, nil): return false
     case (let l?, let r?) where l != r: return l > r
     default: break
+    }
+    if lhs.dormantCount != rhs.dormantCount {
+      return lhs.dormantCount < rhs.dormantCount
     }
     return lhs.reviewer.login.localizedCaseInsensitiveCompare(rhs.reviewer.login)
       == .orderedAscending
@@ -174,17 +194,19 @@ public enum LookupResult: Equatable, Sendable {
   /// was unreachable, so it must not be drawn like one.
   case notFound(LookupTarget)
 
-  /// Rewrites every PR's clock, for a fixture whose timestamps are fixed. Team members are
-  /// re-ranked, because the oldest wait is part of the ranking.
-  public func mapItems(_ transform: (PullRequestItem) -> PullRequestItem) -> LookupResult {
+  /// Rewrites every PR's clocks, for a fixture whose timestamps are fixed. Each load is
+  /// re-split and the team re-ranked as of `now`, because both depend on the clocks.
+  public func mapItems(
+    asOf now: Date, _ transform: (PullRequestItem) -> PullRequestItem
+  ) -> LookupResult {
     switch self {
     case .user(let load):
-      return .user(load.withItems(load.items.map(transform)))
+      return .user(load.withItems(load.items.map(transform), asOf: now))
     case .team(let team):
       return .team(
         TeamLoad(
           roster: team.roster,
-          members: team.members.map { $0.withItems($0.items.map(transform)) }))
+          members: team.members.map { $0.withItems($0.items.map(transform), asOf: now) }))
     case .notFound:
       return self
     }

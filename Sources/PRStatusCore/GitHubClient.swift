@@ -56,6 +56,7 @@ public struct GitHubClient: Sendable {
       url
       isDraft
       createdAt
+      updatedAt
       additions
       deletions
       changedFiles
@@ -284,6 +285,7 @@ public struct GitHubClient: Sendable {
     let url: String?
     let isDraft: Bool?
     let createdAt: String?
+    let updatedAt: String?
     let additions: Int?
     let deletions: Int?
     let changedFiles: Int?
@@ -311,6 +313,9 @@ public struct GitHubClient: Sendable {
         authorLogin: author?.login ?? "ghost",
         authorAvatarURL: author?.avatarUrl.flatMap(URL.init(string:)),
         isDraft: isDraft ?? false,
+        // A PR that was never touched reports updatedAt == createdAt, so creation is the
+        // floor rather than a guess when the field is absent.
+        updatedAt: updatedAt.flatMap(Date.init(githubTimestamp:)) ?? createdAt,
         additions: additions ?? 0,
         deletions: deletions ?? 0,
         changedFiles: changedFiles ?? 0,

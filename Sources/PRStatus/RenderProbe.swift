@@ -204,14 +204,18 @@ enum RenderProbe {
 
 extension LookupResult {
   /// Every person's PRs walk the same age spread the queue does, so the team rows show
-  /// each colour rather than all reading as urgent.
+  /// each colour rather than all reading as urgent. The fourth stop is past the dormant
+  /// threshold, so a dormant count appears too.
   fileprivate func spreadingAges() -> LookupResult {
-    let spread: [TimeInterval] = [30 * 60, 2 * 3600 + 20 * 60, 26 * 3600, 5 * 60, 4 * 3600]
+    let spread: [TimeInterval] = [
+      30 * 60, 2 * 3600 + 20 * 60, 26 * 3600, 4 * 86400 + 3 * 3600, 5 * 60, 4 * 3600,
+    ]
     let now = Date()
     var index = 0
-    return mapItems { item in
+    return mapItems(asOf: now) { item in
       defer { index += 1 }
-      return item.withWaitingSince(now.addingTimeInterval(-spread[index % spread.count]))
+      let since = now.addingTimeInterval(-spread[index % spread.count])
+      return item.withWaitingSince(since).withUpdatedAt(since)
     }
   }
 }
