@@ -46,52 +46,56 @@ public struct GitHubClient: Sendable {
 
   static let searchQuery = "is:open is:pr review-requested:@me archived:false"
 
-  static let graphQLQuery = """
-    query($q: String!) {
-      viewer { login }
-      search(query: $q, type: ISSUE, first: 50) {
-        issueCount
+  /// Selected by every query that returns pull requests, so the viewer's queue and a
+  /// reviewer lookup decode through one `Node`.
+  static let pullRequestFragment = """
+    fragment PullRequestFields on PullRequest {
+      id
+      number
+      title
+      url
+      isDraft
+      createdAt
+      additions
+      deletions
+      changedFiles
+      repository { nameWithOwner }
+      author { login avatarUrl }
+      reviewRequests(first: 100) {
         nodes {
-          ... on PullRequest {
-            id
-            number
-            title
-            url
-            isDraft
+          requestedReviewer {
+            __typename
+            ... on User { login }
+            ... on Team { name }
+          }
+        }
+      }
+      timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) {
+        nodes {
+          __typename
+          ... on ReviewRequestedEvent {
             createdAt
-            additions
-            deletions
-            changedFiles
-            repository { nameWithOwner }
-            author { login avatarUrl }
-            reviewRequests(first: 100) {
-              nodes {
-                requestedReviewer {
-                  __typename
-                  ... on User { login }
-                  ... on Team { name }
-                }
-              }
-            }
-            timelineItems(last: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) {
-              nodes {
-                __typename
-                ... on ReviewRequestedEvent {
-                  createdAt
-                  requestedReviewer {
-                    __typename
-                    ... on User { login }
-                    ... on Team { name }
-                  }
-                }
-                ... on ReadyForReviewEvent { createdAt }
-              }
+            requestedReviewer {
+              __typename
+              ... on User { login }
+              ... on Team { name }
             }
           }
+          ... on ReadyForReviewEvent { createdAt }
         }
       }
     }
     """
+
+  static let queueQuery = """
+    query($q: String!) {
+      viewer { login }
+      search(query: $q, type: ISSUE, first: 50) {
+        issueCount
+        nodes { ...PullRequestFields }
+      }
+    }
+    """ + pullRequestFragment
 
   // MARK: - Token
 
@@ -165,7 +169,13 @@ public struct GitHubClient: Sendable {
 
   public func fetch() async throws -> GitHubFetchResult {
     let token = try Self.fetchToken()
+    let data = try await Self.post(Self.queueQuery, variables: ["q": Self.searchQuery], token: token)
+    return try Self.decode(data)
+  }
 
+  static func post(_ query: String, variables: [String: String], token: String) async throws
+    -> Data
+  {
     var request = URLRequest(url: URL(string: "https://api.github.com/graphql")!)
     request.httpMethod = "POST"
     request.setValue("bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -173,8 +183,8 @@ public struct GitHubClient: Sendable {
     request.setValue("PRStatus", forHTTPHeaderField: "User-Agent")
     request.timeoutInterval = 20
     request.httpBody = try JSONSerialization.data(withJSONObject: [
-      "query": Self.graphQLQuery,
-      "variables": ["q": Self.searchQuery],
+      "query": query,
+      "variables": variables,
     ])
 
     let data: Data
@@ -192,46 +202,77 @@ public struct GitHubClient: Sendable {
       }
       throw GitHubClientError.api("HTTP \(http.statusCode) from api.github.com.")
     }
-
-    return try Self.decode(data)
+    return data
   }
 
   // MARK: - Decode
 
   public static func decode(_ data: Data) throws -> GitHubFetchResult {
-    let decoder = JSONDecoder()
-    let envelope: Envelope
+    guard case .found(let payload) = try unwrap(Payload.self, from: data) else {
+      throw GitHubClientError.api("GitHub could not resolve the signed-in user.")
+    }
+    let viewerLogin = payload.viewer.login
+    return GitHubFetchResult(viewerLogin: viewerLogin, items: payload.search.items(for: viewerLogin))
+  }
+
+  enum Unwrapped<Payload> {
+    case found(Payload)
+    /// GitHub answered, and the answer is that a named user or organization does not
+    /// exist. It arrives as a null field plus a NOT_FOUND error, which is a fact about the
+    /// name rather than a failure of the request.
+    case notFound
+  }
+
+  /// Opens the GraphQL envelope: errors other than NOT_FOUND, or a missing `data`, are
+  /// failures of the request as a whole.
+  static func unwrap<Payload: Decodable>(_ type: Payload.Type, from data: Data) throws
+    -> Unwrapped<Payload>
+  {
+    let envelope: Envelope<Payload>
     do {
-      envelope = try decoder.decode(Envelope.self, from: data)
+      envelope = try JSONDecoder().decode(Envelope<Payload>.self, from: data)
     } catch {
       throw GitHubClientError.api("Unexpected response shape: \(error.localizedDescription)")
     }
 
     if let errors = envelope.errors, !errors.isEmpty {
-      throw GitHubClientError.api(errors.map(\.message).joined(separator: " "))
+      guard errors.allSatisfy({ $0.type == "NOT_FOUND" }) else {
+        throw GitHubClientError.api(errors.map(\.message).joined(separator: " "))
+      }
+      return .notFound
     }
     guard let payload = envelope.data else {
       throw GitHubClientError.api("Response contained no data.")
     }
-
-    let viewerLogin = payload.viewer.login
-    let items = payload.search.nodes.compactMap { $0.toItem(viewerLogin: viewerLogin) }
-    return GitHubFetchResult(viewerLogin: viewerLogin, items: items)
+    return .found(payload)
   }
 
   // MARK: - Wire types
 
-  struct Envelope: Decodable {
+  struct Envelope<Payload: Decodable>: Decodable {
     let data: Payload?
     let errors: [Message]?
   }
-  struct Message: Decodable { let message: String }
+  struct Message: Decodable {
+    let message: String
+    let type: String?
+  }
   struct Payload: Decodable {
     let viewer: Viewer
     let search: Search
   }
   struct Viewer: Decodable { let login: String }
-  struct Search: Decodable { let nodes: [Node] }
+
+  /// `nodes` is absent when a query asks for the count alone.
+  struct Search: Decodable {
+    let issueCount: Int
+    let nodes: [Node]?
+
+    /// Oldest first, with every clock resolved for `reviewerLogin`.
+    func items(for reviewerLogin: String) -> [PullRequestItem] {
+      (nodes ?? []).compactMap { $0.toItem(reviewerLogin: reviewerLogin) }.oldestFirst()
+    }
+  }
 
   /// `search(type: ISSUE)` can yield nodes that are not pull requests, which arrive as
   /// empty objects. Every field is optional so one such node cannot fail the whole
@@ -251,7 +292,7 @@ public struct GitHubClient: Sendable {
     let reviewRequests: ReviewRequests?
     let timelineItems: TimelineItems?
 
-    func toItem(viewerLogin: String) -> PullRequestItem? {
+    func toItem(reviewerLogin: String) -> PullRequestItem? {
       guard let id, let number, let title,
         let urlString = url, let url = URL(string: urlString),
         let createdAtString = createdAt, let createdAt = Date(githubTimestamp: createdAtString)
@@ -274,9 +315,9 @@ public struct GitHubClient: Sendable {
         deletions: deletions ?? 0,
         changedFiles: changedFiles ?? 0,
         requestKind: resolveRequestKind(
-          requestedUserLogins: requestedUserLogins, viewerLogin: viewerLogin),
+          requestedUserLogins: requestedUserLogins, reviewerLogin: reviewerLogin),
         waitingSince: resolveWaitingSince(
-          events: events, viewerLogin: viewerLogin, createdAt: createdAt))
+          events: events, reviewerLogin: reviewerLogin, createdAt: createdAt))
     }
   }
 
@@ -286,7 +327,7 @@ public struct GitHubClient: Sendable {
     let avatarUrl: String?
   }
   /// Only `... on User { login }` is selected, so a bot or a team reviewer decodes with a
-  /// nil login and never counts as a request naming me.
+  /// nil login and never counts as a request naming the reviewer.
   struct ReviewRequests: Decodable { let nodes: [ReviewRequestNode]? }
   struct ReviewRequestNode: Decodable { let requestedReviewer: RequestedReviewer? }
 

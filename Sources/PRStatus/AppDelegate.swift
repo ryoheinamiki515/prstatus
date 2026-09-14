@@ -5,9 +5,13 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-  private let model = AppModel(
-    directRequestsOnly: ReviewFilterPreference.directRequestsOnly,
-    loadItems: ItemSource.resolve())
+  private let model: AppModel = {
+    let source = DataSource.resolve()
+    return AppModel(
+      directRequestsOnly: Preferences.directRequestsOnly,
+      loadItems: source.queue,
+      lookup: LookupModel(text: Preferences.lookupText, perform: source.lookup))
+  }()
   private var statusItem: NSStatusItem!
   private var popover: NSPopover!
   private var cancellable: AnyCancellable?
@@ -88,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     let trace =
       "\(appearance) count=\(count) directOnly=\(model.directRequestsOnly) "
-      + "state=\(stateName) image=\(button.image != nil) title=\"\(button.title)\""
+      + "pane=\(model.pane) state=\(stateName) image=\(button.image != nil) title=\"\(button.title)\""
     guard trace != lastTrace else { return }
     lastTrace = trace
     let stamp = Date().formatted(date: .omitted, time: .standard)
@@ -137,8 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       popover.performClose(nil)
       return
     }
-    model.refresh()
-    model.syncLaunchAtLogin()
+    model.popoverDidOpen()
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     // Without this the popover opens behind the frontmost app and swallows the first click.
     popover.contentViewController?.view.window?.makeKey()

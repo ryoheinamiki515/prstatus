@@ -36,13 +36,13 @@ public struct UrgencyThresholds: Sendable, Equatable {
   }
 }
 
-/// How this PR reached my queue. GitHub's `review-requested:@me` search matches both
-/// routes, so the search alone cannot tell them apart.
+/// How this PR reached the reviewer's queue. GitHub's `review-requested:` search matches
+/// both routes, so the search alone cannot tell them apart.
 public enum ReviewRequestKind: Sendable, Equatable {
-  /// A pending review request names me.
+  /// A pending review request names the reviewer.
   case direct
-  /// No pending request names me. The PR is in my queue at all because a review request
-  /// exists, so a team I belong to carries it.
+  /// No pending request names the reviewer. The PR is in the queue at all because a
+  /// review request exists, so a team the reviewer belongs to carries it.
   case team
 }
 
@@ -64,9 +64,9 @@ public struct PullRequestItem: Identifiable, Sendable, Equatable {
   public let additions: Int
   public let deletions: Int
   public let changedFiles: Int
-  /// Whether someone asked me by name — see `resolveRequestKind`.
+  /// Whether someone asked the reviewer by name — see `resolveRequestKind`.
   public let requestKind: ReviewRequestKind
-  /// When this PR started waiting on *me* — see `resolveWaitingSince`.
+  /// When this PR started waiting on the reviewer — see `resolveWaitingSince`.
   public let waitingSince: Date
 
   public init(
@@ -126,34 +126,34 @@ extension Urgency {
   }
 }
 
-/// Separates "someone asked me" from "someone asked a team I belong to".
+/// Separates "someone asked this reviewer" from "someone asked a team they belong to".
 ///
 /// `requestedUserLogins` holds the logins of the reviewers currently requested on the PR,
 /// so a request that was later removed does not count. Team reviewers carry a name and no
 /// login, which is why they never appear here.
 public func resolveRequestKind(
   requestedUserLogins: [String],
-  viewerLogin: String
+  reviewerLogin: String
 ) -> ReviewRequestKind {
   let namesMe = requestedUserLogins.contains {
-    $0.caseInsensitiveCompare(viewerLogin) == .orderedSame
+    $0.caseInsensitiveCompare(reviewerLogin) == .orderedSame
   }
   return namesMe ? .direct : .team
 }
 
-/// Picks the moment a PR entered my review queue.
+/// Picks the moment a PR entered the reviewer's queue.
 ///
 /// `updatedAt` cannot serve here: a bot comment on an otherwise untouched PR resets
 /// it, so the icon would never age to yellow. Priority order:
-///   1. the most recent review request naming me
+///   1. the most recent review request naming the reviewer
 ///   2. else the most recent review request of any kind — a request routed through a
-///      team carries the team's name, not mine, so without this branch team-assigned
-///      PRs would read as age-zero forever
+///      team carries the team's name, not the reviewer's, so without this branch
+///      team-assigned PRs would read as age-zero forever
 ///   3. else the draft -> ready transition
 ///   4. else PR creation
 public func resolveWaitingSince(
   events: [TimelineEvent],
-  viewerLogin: String,
+  reviewerLogin: String,
   createdAt: Date
 ) -> Date {
   var mine: [Date] = []
@@ -162,9 +162,11 @@ public func resolveWaitingSince(
 
   for event in events {
     switch event {
-    case .reviewRequested(let at, let reviewerLogin):
+    case .reviewRequested(let at, let requestedLogin):
       anyRequest.append(at)
-      if let reviewerLogin, reviewerLogin.caseInsensitiveCompare(viewerLogin) == .orderedSame {
+      if let requestedLogin,
+        requestedLogin.caseInsensitiveCompare(reviewerLogin) == .orderedSame
+      {
         mine.append(at)
       }
     case .readyForReview(let at):
@@ -173,6 +175,13 @@ public func resolveWaitingSince(
   }
 
   return mine.max() ?? anyRequest.max() ?? readyForReview.max() ?? createdAt
+}
+
+extension Array where Element == PullRequestItem {
+  /// The order every list in the app shows: the PR that has waited longest at the top.
+  public func oldestFirst() -> [PullRequestItem] {
+    sorted { $0.waitingSince < $1.waitingSince }
+  }
 }
 
 /// nil means nothing is waiting, which is what drives the hollow circle.

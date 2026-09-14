@@ -56,7 +56,8 @@ To start it automatically, tick **Open at Login** in the popover footer.
 
 Click the circle for the queue. Rows are ordered oldest first, each showing the repository
 and number, author, how long it has waited, and the diff size. Click a row to open that PR
-in your browser. Drafts are tagged.
+in your browser. Drafts are tagged. The header switches between **Your queue** and
+**Look up**, which asks the same question about someone else.
 
 The list refreshes every 60 seconds, when you open the popover, and on wake from sleep — a
 lid closed for four hours should not reveal a stale green circle.
@@ -106,6 +107,44 @@ toward the menu bar number and can no longer colour the circle — a red circle 
 explain from the list would be worse than no filter at all. When the filter empties the
 list, the popover says how many PRs sit behind it instead of reporting a clear queue.
 
+## Look up a reviewer
+
+The queue answers "what is waiting on me". The **Look up** pane asks the same question
+about somebody else, which is the question you have when you are about to request a
+review: who has room for one?
+
+Type a GitHub login and press Return to see the open PRs that name that person as a
+reviewer, oldest first, in the same colours as your own queue. Type a team as `org/slug`
+to see every member ranked least loaded first: how many PRs name each of them, how long
+the oldest has waited, and a bar for comparing at a glance. Click a row to open that
+person's requests on GitHub.
+
+| | |
+|:--:|:--:|
+| <img src="docs/lookup-team.png" width="330" alt="The Look up pane showing a team of five, each member with a count of PRs waiting on them, the age of the oldest, and a bar"> | <img src="docs/lookup-user.png" width="330" alt="The Look up pane showing one person with three PRs waiting, the oldest for a day"> |
+| A team, least loaded first | One person |
+
+Counts are **direct requests only** — GitHub's `user-review-requested:` qualifier, the
+same split the Direct only filter makes. A PR requested from the team itself sits in every
+member's queue alike, so it says nothing about whom to pick; the header reports those
+once instead of adding them to each row.
+
+The ranking puts the fewest requests first. Among equals, the person whose oldest request
+is newest is less behind. Nothing waiting ranks above anything waiting, and ties fall back
+to login so the order holds still between refreshes.
+
+A person costs one request. A team costs one request for the roster, then one search per
+member, six to a request, run concurrently. GitHub runs the searches inside a request one
+after another at a few hundred milliseconds each and cuts the request off at ten seconds,
+so six is the batch size, and a team of forty takes about as long as a team of six: around
+five seconds. Each member costs about one rate-limit point of the 5000 an hour. The pane
+refreshes only while it is showing, so the menu bar's poll stays at one point a minute.
+
+The last name persists, so your own team is one click away. An unknown login or team gets
+its own message rather than an empty list: not-found is an answer, not a failure, and is
+never drawn like an unreachable GitHub. Teams are visible only inside organizations your
+`gh` account belongs to, with the `read:org` scope that `gh auth login` grants by default.
+
 ## Authentication
 
 PRStatus shells out to `gh auth token`, so it inherits whichever account `gh` is signed in
@@ -148,6 +187,7 @@ All optional. The app ignores them unless set.
 | `PRSTATUS_FIXTURE=<path>` | Load rows from a captured response instead of the network, every item's clock starting at launch. |
 | `PRSTATUS_TRACE=1` | Print each icon state change, and the status item's screen frame, to stdout. |
 | `PRSTATUS_RENDER=<dir>` | Write a PNG of every popover state in light and dark, then exit. Needs no Screen Recording permission. |
+| `PRSTATUS_LOOKUP_PROBE=<name>` | Run one lookup against GitHub, print what the pane would show and how long it took, then exit. |
 | `PRSTATUS_LOGIN_PROBE=1` | Report whether Open at Login registers via SMAppService or the LaunchAgent fallback, then restore the previous setting. |
 
 Watch the full progression yourself:
@@ -165,10 +205,11 @@ swift build --product SelfTest && ./.build/debug/SelfTest
 ```
 
 `swift test` **cannot run here**: the Command Line Tools ship neither XCTest nor
-swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 108
+swift-testing. `SelfTest` is a plain executable that asserts and exits non-zero — 168
 checks over threshold boundaries, the wait-time cascade, the direct-versus-team split,
-response decoding, duration formatting, menu bar appearance, fetch-outcome transitions and
-error presentation. It is not a framework: no fixture isolation, no parameterisation, and
+response decoding, duration formatting, menu bar appearance, fetch-outcome transitions,
+error presentation, lookup parsing, reviewer ranking and the not-found-versus-failure
+split. It is not a framework: no fixture isolation, no parameterisation, and
 it covers `PRStatusCore` only. The AppKit and SwiftUI layer is checked with
 `PRSTATUS_RENDER`.
 
@@ -176,7 +217,7 @@ it covers `PRStatusCore` only. The AppKit and SwiftUI layer is checked with
 Sources/PRStatusCore/   pure logic, no AppKit — the part SelfTest links
 Sources/PRStatus/       status item, popover, launch-at-login
 Sources/SelfTest/       assertions
-Fixtures/               captured GraphQL response
+Fixtures/               captured GraphQL responses
 ```
 
 ### Fixtures
@@ -187,13 +228,21 @@ review request routed through a team carries a `name` and no `login`. Two of its
 name the viewer directly, so the **Direct only** filter has something to keep and something
 to drop.
 
-Its timestamps are fixed, so with real time every row eventually reads as urgent. The
+`Fixtures/lookup-user.json`, `lookup-team.json` and `lookup-team-load.json` are the three
+responses behind one team lookup, anonymised the same way: the roster, and the aliased
+per-member searches that the roster's order indexes into. With `PRSTATUS_FIXTURE` set, any
+login shows the captured person and any `org/slug` the captured team.
+
+Their timestamps are fixed, so with real time every row eventually reads as urgent. The
 render probe spreads the sample ages across the thresholds so documentation shots show
 every colour.
 
 ## Limitations
 
-- Only tracks PRs where review is **requested of you** — not `assignee`, not PRs you authored.
+- The menu bar tracks only PRs where review is **requested of you** — not `assignee`, not
+  PRs you authored.
+- A team's roster is cut at 100 members, and a person's oldest wait is read from their
+  first 30 PRs, oldest-created first.
 - Thresholds are fixed at 1 and 3 hours unless overridden by environment variable.
 - Ad-hoc signed. Gatekeeper will need convincing if the bundle is moved between machines.
 - No app icon artwork, no auto-update, no notifications.

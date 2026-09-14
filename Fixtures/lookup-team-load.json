@@ -1,0 +1,760 @@
+{
+  "data": {
+    "m0": {
+      "issueCount": 0,
+      "nodes": []
+    },
+    "m1": {
+      "issueCount": 3,
+      "nodes": [
+        {
+          "id": "PR_fixture101",
+          "number": 17242,
+          "title": "Fixture pull request 17242",
+          "url": "https://github.com/acme/service/pull/17242",
+          "isDraft": false,
+          "createdAt": "2026-09-08T23:47:15Z",
+          "additions": 2809,
+          "deletions": 558,
+          "changedFiles": 152,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev4",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-08T23:47:15Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-08T23:47:15Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture102",
+          "number": 17465,
+          "title": "Fixture pull request 17465",
+          "url": "https://github.com/acme/service/pull/17465",
+          "isDraft": true,
+          "createdAt": "2026-09-10T22:16:38Z",
+          "additions": 418,
+          "deletions": 102,
+          "changedFiles": 11,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev5",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev6"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T22:16:49Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T22:16:49Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev6"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture103",
+          "number": 17496,
+          "title": "Fixture pull request 17496",
+          "url": "https://github.com/acme/service/pull/17496",
+          "isDraft": false,
+          "createdAt": "2026-09-11T13:24:32Z",
+          "additions": 4847,
+          "deletions": 1676,
+          "changedFiles": 146,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev4",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReadyForReviewEvent",
+                "createdAt": "2026-09-11T18:59:53Z"
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:55:10Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev1"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "m2": {
+      "issueCount": 2,
+      "nodes": [
+        {
+          "id": "PR_fixture104",
+          "number": 16362,
+          "title": "Fixture pull request 16362",
+          "url": "https://github.com/acme/service/pull/16362",
+          "isDraft": false,
+          "createdAt": "2026-08-20T17:05:23Z",
+          "additions": 1646,
+          "deletions": 1060,
+          "changedFiles": 110,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev7",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev8"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev9"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev10"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev8"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev9"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev10"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev11"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture105",
+          "number": 17577,
+          "title": "Fixture pull request 17577",
+          "url": "https://github.com/acme/service/pull/17577",
+          "isDraft": false,
+          "createdAt": "2026-09-14T14:59:27Z",
+          "additions": 1751,
+          "deletions": 11,
+          "changedFiles": 23,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev3",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:13:53Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:13:53Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:13:53Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "m3": {
+      "issueCount": 7,
+      "nodes": [
+        {
+          "id": "PR_fixture106",
+          "number": 10669,
+          "title": "Fixture pull request 10669",
+          "url": "https://github.com/acme/service/pull/10669",
+          "isDraft": false,
+          "createdAt": "2026-03-30T14:26:40Z",
+          "additions": 47,
+          "deletions": 12,
+          "changedFiles": 4,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev1",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-03-31T04:35:07Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture107",
+          "number": 12125,
+          "title": "Fixture pull request 12125",
+          "url": "https://github.com/acme/service/pull/12125",
+          "isDraft": false,
+          "createdAt": "2026-05-04T22:18:25Z",
+          "additions": 1116,
+          "deletions": 43,
+          "changedFiles": 6,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev12",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-05-04T22:22:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev13"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-05-04T22:22:59Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture104",
+          "number": 16362,
+          "title": "Fixture pull request 16362",
+          "url": "https://github.com/acme/service/pull/16362",
+          "isDraft": false,
+          "createdAt": "2026-08-20T17:05:23Z",
+          "additions": 1646,
+          "deletions": 1060,
+          "changedFiles": 110,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev7",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev8"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev9"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev10"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev8"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev9"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev10"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-10T19:36:45Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev11"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture108",
+          "number": 16481,
+          "title": "Fixture pull request 16481",
+          "url": "https://github.com/acme/service/pull/16481",
+          "isDraft": false,
+          "createdAt": "2026-08-24T20:05:53Z",
+          "additions": 171,
+          "deletions": 97,
+          "changedFiles": 13,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev1",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-24T20:05:54Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-24T20:05:54Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-08-24T20:05:54Z",
+                "requestedReviewer": null
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture109",
+          "number": 17529,
+          "title": "Fixture pull request 17529",
+          "url": "https://github.com/acme/service/pull/17529",
+          "isDraft": false,
+          "createdAt": "2026-09-11T19:50:19Z",
+          "additions": 2197,
+          "deletions": 443,
+          "changedFiles": 36,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev14",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-11T19:53:43Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture110",
+          "number": 17542,
+          "title": "Fixture pull request 17542",
+          "url": "https://github.com/acme/service/pull/17542",
+          "isDraft": false,
+          "createdAt": "2026-09-11T23:08:49Z",
+          "additions": 608,
+          "deletions": 57,
+          "changedFiles": 17,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev15",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T17:10:22Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "PR_fixture105",
+          "number": 17577,
+          "title": "Fixture pull request 17577",
+          "url": "https://github.com/acme/service/pull/17577",
+          "isDraft": false,
+          "createdAt": "2026-09-14T14:59:27Z",
+          "additions": 1751,
+          "deletions": 11,
+          "changedFiles": 23,
+          "repository": {
+            "nameWithOwner": "acme/service"
+          },
+          "author": {
+            "login": "dev3",
+            "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:13:53Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "reviewer-me"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:13:53Z",
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "dev4"
+                }
+              },
+              {
+                "__typename": "ReviewRequestedEvent",
+                "createdAt": "2026-09-14T15:13:53Z",
+                "requestedReviewer": {
+                  "__typename": "Team",
+                  "name": "platform-reviewers"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "m4": {
+      "issueCount": 0,
+      "nodes": []
+    }
+  }
+}

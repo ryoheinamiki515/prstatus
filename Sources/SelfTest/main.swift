@@ -120,7 +120,7 @@ equal(
       .readyForReview(at: readyAt),
       .reviewRequested(at: teamAt, reviewerLogin: nil),
       .reviewRequested(at: mineEarly, reviewerLogin: "reviewer-me"),
-    ], viewerLogin: "reviewer-me", createdAt: createdAt), mineEarly)
+    ], reviewerLogin: "reviewer-me", createdAt: createdAt), mineEarly)
 
 equal(
   "1b. latest request naming me wins (re-request resets the clock)",
@@ -128,7 +128,7 @@ equal(
     events: [
       .reviewRequested(at: mineEarly, reviewerLogin: "reviewer-me"),
       .reviewRequested(at: mineLate, reviewerLogin: "reviewer-me"),
-    ], viewerLogin: "reviewer-me", createdAt: createdAt), mineLate)
+    ], reviewerLogin: "reviewer-me", createdAt: createdAt), mineLate)
 
 equal(
   "1c. another user's later request does not move my clock",
@@ -136,13 +136,13 @@ equal(
     events: [
       .reviewRequested(at: mineEarly, reviewerLogin: "reviewer-me"),
       .reviewRequested(at: mineLate, reviewerLogin: "someone-else"),
-    ], viewerLogin: "reviewer-me", createdAt: createdAt), mineEarly)
+    ], reviewerLogin: "reviewer-me", createdAt: createdAt), mineEarly)
 
 equal(
   "1d. login comparison is case-insensitive",
   resolveWaitingSince(
     events: [.reviewRequested(at: mineEarly, reviewerLogin: "Reviewer-ME")],
-    viewerLogin: "reviewer-me", createdAt: createdAt), mineEarly)
+    reviewerLogin: "reviewer-me", createdAt: createdAt), mineEarly)
 
 equal(
   "2. team-only request falls back to any request, not createdAt",
@@ -150,48 +150,48 @@ equal(
     events: [
       .readyForReview(at: readyAt),
       .reviewRequested(at: teamAt, reviewerLogin: nil),
-    ], viewerLogin: "reviewer-me", createdAt: createdAt), teamAt)
+    ], reviewerLogin: "reviewer-me", createdAt: createdAt), teamAt)
 
 equal(
   "2b. request naming a different user still counts as any-request",
   resolveWaitingSince(
     events: [.reviewRequested(at: teamAt, reviewerLogin: "someone-else")],
-    viewerLogin: "reviewer-me", createdAt: createdAt), teamAt)
+    reviewerLogin: "reviewer-me", createdAt: createdAt), teamAt)
 
 equal(
   "3. ready-for-review only",
   resolveWaitingSince(
     events: [.readyForReview(at: readyAt)],
-    viewerLogin: "reviewer-me", createdAt: createdAt), readyAt)
+    reviewerLogin: "reviewer-me", createdAt: createdAt), readyAt)
 
 equal(
   "4. no events falls back to createdAt",
-  resolveWaitingSince(events: [], viewerLogin: "reviewer-me", createdAt: createdAt), createdAt)
+  resolveWaitingSince(events: [], reviewerLogin: "reviewer-me", createdAt: createdAt), createdAt)
 
 // MARK: - Direct vs team review requests
 
 section("Request kind (drives the direct-only filter)")
 equal(
   "a pending request naming me is direct",
-  resolveRequestKind(requestedUserLogins: ["reviewer-me"], viewerLogin: "reviewer-me"), .direct)
+  resolveRequestKind(requestedUserLogins: ["reviewer-me"], reviewerLogin: "reviewer-me"), .direct)
 equal(
   "my login among other people's is still direct",
   resolveRequestKind(
-    requestedUserLogins: ["dev1", "reviewer-me", "dev2"], viewerLogin: "reviewer-me"), .direct)
+    requestedUserLogins: ["dev1", "reviewer-me", "dev2"], reviewerLogin: "reviewer-me"), .direct)
 equal(
   "login comparison is case-insensitive",
-  resolveRequestKind(requestedUserLogins: ["Reviewer-ME"], viewerLogin: "reviewer-me"), .direct)
+  resolveRequestKind(requestedUserLogins: ["Reviewer-ME"], reviewerLogin: "reviewer-me"), .direct)
 equal(
   "only other people named -> team",
-  resolveRequestKind(requestedUserLogins: ["dev1", "dev2"], viewerLogin: "reviewer-me"), .team)
+  resolveRequestKind(requestedUserLogins: ["dev1", "dev2"], reviewerLogin: "reviewer-me"), .team)
 // Team reviewers carry a name and no login, so they never reach this list. A PR is in the
 // queue only because a request exists, so no user login means a team carries it.
 equal(
   "no user reviewers -> team",
-  resolveRequestKind(requestedUserLogins: [], viewerLogin: "reviewer-me"), .team)
+  resolveRequestKind(requestedUserLogins: [], reviewerLogin: "reviewer-me"), .team)
 equal(
   "a login that merely contains mine is not mine",
-  resolveRequestKind(requestedUserLogins: ["reviewer-me-2"], viewerLogin: "reviewer-me"), .team)
+  resolveRequestKind(requestedUserLogins: ["reviewer-me-2"], reviewerLogin: "reviewer-me"), .team)
 
 // MARK: - Threshold override parsing
 
@@ -242,6 +242,9 @@ do {
 
   equal("viewer login", result.viewerLogin, "reviewer-me")
   equal("item count", result.items.count, 6)
+  check(
+    "items arrive oldest first",
+    result.items.map(\.waitingSince) == result.items.map(\.waitingSince).sorted())
 
   func find(_ number: Int) -> PullRequestItem? { result.items.first { $0.number == number } }
 
@@ -395,9 +398,9 @@ do {
 section("Menu bar appearance")
 let fresh = item("a", waitingSince: epoch.addingTimeInterval(-60))
 let old = item("b", waitingSince: epoch.addingTimeInterval(-4 * 3600))
-let emptyQueue = LoadState.loaded(items: [], at: epoch, refreshError: nil)
+let emptyQueue = ReviewQueueState.loaded(value: [], at: epoch, refreshError: nil)
 
-func appearance(_ state: LoadState, at now: Date = epoch) -> StatusAppearance {
+func appearance(_ state: ReviewQueueState, at now: Date = epoch) -> StatusAppearance {
   statusAppearance(for: state, now: now, thresholds: standard)
 }
 
@@ -407,7 +410,7 @@ equal("failed -> unavailable", appearance(.failed(.ghNotFound)), .unavailable)
 equal("loaded empty -> idle", appearance(emptyQueue), .idle)
 equal(
   "loaded with items -> waiting at worst urgency",
-  appearance(.loaded(items: [fresh, old], at: epoch, refreshError: nil)), .waiting(.urgent))
+  appearance(.loaded(value: [fresh, old], at: epoch, refreshError: nil)), .waiting(.urgent))
 
 // The bug this enum exists to prevent: a hollow "all clear" circle while GitHub is
 // unreachable is a silent failure that reads as good news.
@@ -419,40 +422,40 @@ check(
   appearance(.loading) != appearance(emptyQueue))
 
 section("Fetch outcome transitions")
-let loadedEarlier = LoadState.loaded(items: [fresh], at: epoch, refreshError: nil)
+let loadedEarlier = ReviewQueueState.loaded(value: [fresh], at: epoch, refreshError: nil)
 let offline = GitHubClientError.network("503")
 
 equal(
   "success replaces items and clears any prior error",
   nextState(after: .failed(.ghNotFound), result: .success([old]), now: epoch),
-  .loaded(items: [old], at: epoch, refreshError: nil))
+  .loaded(value: [old], at: epoch, refreshError: nil))
 equal(
-  "success orders items oldest first",
+  "success stores the value as given",
   nextState(after: .never, result: .success([fresh, old]), now: epoch).items.map(\.id),
-  ["b", "a"])
+  ["a", "b"])
 equal(
   "failure with rows on screen keeps them and records the error",
   nextState(after: loadedEarlier, result: .failure(offline), now: epoch),
-  .loaded(items: [fresh], at: epoch, refreshError: offline))
+  .loaded(value: [fresh], at: epoch, refreshError: offline))
 equal(
   "failure with no prior data surfaces the error",
-  nextState(after: .loading, result: .failure(.ghNotFound), now: epoch),
+  nextState(after: ReviewQueueState.loading, result: .failure(.ghNotFound), now: epoch),
   .failed(.ghNotFound))
 // A queue we successfully learned was empty is knowledge; losing it to one 503 would
 // swap a true "nothing waiting" for a false "cannot reach GitHub".
 equal(
   "failure after an empty load keeps the known-empty queue and marks it stale",
   nextState(after: emptyQueue, result: .failure(offline), now: epoch),
-  .loaded(items: [], at: epoch, refreshError: offline))
+  .loaded(value: [], at: epoch, refreshError: offline))
 equal(
   "a known-empty queue still reads as idle while stale",
-  appearance(.loaded(items: [], at: epoch, refreshError: offline)), .idle)
+  appearance(.loaded(value: [], at: epoch, refreshError: offline)), .idle)
 equal(
   "a recovered refresh clears the stale marker",
   nextState(
-    after: .loaded(items: [fresh], at: epoch, refreshError: offline),
+    after: .loaded(value: [fresh], at: epoch, refreshError: offline),
     result: .success([fresh]), now: epoch),
-  .loaded(items: [fresh], at: epoch, refreshError: nil))
+  .loaded(value: [fresh], at: epoch, refreshError: nil))
 equal(
   "kept rows still age while refreshes fail",
   appearance(
@@ -467,8 +470,8 @@ section("Direct-requests-only filter")
 let directFresh = item("direct", waitingSince: epoch.addingTimeInterval(-60))
 let teamUrgent = item(
   "team", waitingSince: epoch.addingTimeInterval(-4 * 3600), requestKind: .team)
-let mixedQueue = LoadState.loaded(
-  items: [teamUrgent, directFresh], at: epoch, refreshError: nil)
+let mixedQueue = ReviewQueueState.loaded(
+  value: [teamUrgent, directFresh], at: epoch, refreshError: nil)
 
 equal(
   "filter off keeps every PR",
@@ -478,8 +481,8 @@ equal(
   mixedQueue.showing(directRequestsOnly: true).items.map(\.id), ["direct"])
 equal(
   "filter preserves the oldest-first order",
-  LoadState.loaded(
-    items: [
+  ReviewQueueState.loaded(
+    value: [
       item("a", waitingSince: epoch.addingTimeInterval(-3 * 3600)),
       item("t", waitingSince: epoch.addingTimeInterval(-2 * 3600), requestKind: .team),
       item("b", waitingSince: epoch.addingTimeInterval(-60)),
@@ -497,22 +500,22 @@ equal(
 equal(
   "a queue of team PRs only reads as idle under the filter",
   appearance(
-    LoadState.loaded(items: [teamUrgent], at: epoch, refreshError: nil)
+    ReviewQueueState.loaded(value: [teamUrgent], at: epoch, refreshError: nil)
       .showing(directRequestsOnly: true)), .idle)
 
 // A filtered-to-empty queue must stay distinguishable from a failure, which is what
 // `showing` returning the state's own case preserves.
 equal(
   "the filter keeps the stale marker and the timestamp",
-  LoadState.loaded(items: [teamUrgent], at: epoch, refreshError: offline)
+  ReviewQueueState.loaded(value: [teamUrgent], at: epoch, refreshError: offline)
     .showing(directRequestsOnly: true),
-  .loaded(items: [], at: epoch, refreshError: offline))
-equal("the filter leaves a failure alone", LoadState.failed(.ghNotFound)
+  .loaded(value: [], at: epoch, refreshError: offline))
+equal("the filter leaves a failure alone", ReviewQueueState.failed(.ghNotFound)
   .showing(directRequestsOnly: true), .failed(.ghNotFound))
-equal("the filter leaves loading alone", LoadState.loading.showing(directRequestsOnly: true),
+equal("the filter leaves loading alone", ReviewQueueState.loading.showing(directRequestsOnly: true),
   .loading)
 equal(
-  "the filter leaves never alone", LoadState.never.showing(directRequestsOnly: true), .never)
+  "the filter leaves never alone", ReviewQueueState.never.showing(directRequestsOnly: true), .never)
 
 // MARK: - Error presentation
 
@@ -537,6 +540,247 @@ equal(
   GitHubClientError.notAuthenticated("token expired").hint, "token expired")
 equal("network detail surfaces verbatim", GitHubClientError.network("offline").hint, "offline")
 equal("api detail surfaces verbatim", GitHubClientError.api("boom").hint, "boom")
+
+// MARK: - LoadState projections
+
+section("LoadState projections")
+equal(
+  "map carries the timestamp and the stale marker",
+  LoadState.loaded(value: 2, at: epoch, refreshError: offline).map { $0 * 2 },
+  .loaded(value: 4, at: epoch, refreshError: offline))
+equal(
+  "map leaves a failure alone",
+  LoadState<Int>.failed(.ghNotFound).map { $0 + 1 }, .failed(.ghNotFound))
+equal("map leaves loading alone", LoadState<Int>.loading.map { $0 + 1 }, .loading)
+equal(
+  "currentAsOf dates a current value",
+  LoadState.loaded(value: 1, at: epoch, refreshError: nil).currentAsOf, epoch)
+check(
+  "currentAsOf is hidden while stale, so the banner is the only timestamp",
+  LoadState.loaded(value: 1, at: epoch, refreshError: offline).currentAsOf == nil)
+check("currentAsOf is nil before any load", LoadState<Int>.loading.currentAsOf == nil)
+
+// MARK: - Lookup target parsing
+
+section("Lookup target parsing")
+equal("login", LookupTarget(parsing: "jdoe"), .user(login: "jdoe"))
+equal("@login", LookupTarget(parsing: "@jdoe"), .user(login: "jdoe"))
+equal("surrounding whitespace is trimmed", LookupTarget(parsing: "  jdoe \n"), .user(login: "jdoe"))
+equal(
+  "org/slug", LookupTarget(parsing: "acme/platform-reviewers"),
+  .team(organization: "acme", slug: "platform-reviewers"))
+equal(
+  "@org/slug", LookupTarget(parsing: "@acme/platform-reviewers"),
+  .team(organization: "acme", slug: "platform-reviewers"))
+check("blank -> nil", LookupTarget(parsing: "   ") == nil)
+check("a space inside -> nil", LookupTarget(parsing: "two words") == nil)
+check("a second slash -> nil", LookupTarget(parsing: "a/b/c") == nil)
+check("an empty organization -> nil", LookupTarget(parsing: "/team") == nil)
+check("an empty slug -> nil", LookupTarget(parsing: "acme/") == nil)
+check("non-ASCII letters -> nil", LookupTarget(parsing: "jösé") == nil)
+// A colon or a space would be read as another search qualifier once spliced into the query.
+check("search syntax is rejected", LookupTarget(parsing: "is:open") == nil)
+equal(
+  "display name", LookupTarget.team(organization: "acme", slug: "x").displayName, "acme/x")
+check(
+  "a user's url is GitHub's own list of the same PRs",
+  LookupTarget.user(login: "jdoe").url.absoluteString.hasPrefix("https://github.com/pulls?q=")
+    && (LookupTarget.user(login: "jdoe").url.query ?? "").contains("user-review-requested:jdoe"))
+check(
+  "a team's url searches the team qualifier",
+  (LookupTarget.team(organization: "acme", slug: "x").url.query ?? "")
+    .contains("team-review-requested:acme/x"))
+equal(
+  "a roster's url is the same list its target opens",
+  TeamRoster(slug: "acme/x", name: "x", memberCount: 0, members: [], teamRequestedCount: 0).url,
+  LookupTarget.team(organization: "acme", slug: "x").url)
+
+// MARK: - Ranking
+
+section("Ranking by availability (least loaded first)")
+func profile(_ login: String) -> ReviewerProfile {
+  ReviewerProfile(login: login, name: nil, avatarURL: nil)
+}
+func load(_ login: String, _ count: Int, oldest: TimeInterval?) -> ReviewerLoad {
+  ReviewerLoad(
+    reviewer: profile(login), requestedCount: count,
+    items: oldest.map { [item(login, waitingSince: epoch.addingTimeInterval(-$0))] } ?? [])
+}
+let idle = load("zed", 0, oldest: nil)
+let oneRecent = load("amy", 1, oldest: 3600)
+let oneOld = load("bob", 1, oldest: 5 * 3600)
+let busy = load("cat", 4, oldest: 60)
+
+equal(
+  "fewest requests first",
+  rankByAvailability([busy, oneOld, oneRecent, idle]).map(\.id), ["zed", "amy", "bob", "cat"])
+equal(
+  "count outranks age: four fresh requests still sit below one old one",
+  rankByAvailability([busy, oneOld]).map(\.id), ["bob", "cat"])
+equal(
+  "among equal counts the shorter longest-wait ranks higher",
+  rankByAvailability([oneOld, oneRecent]).map(\.id), ["amy", "bob"])
+equal(
+  "full ties fall back to login, case-insensitively",
+  rankByAvailability([load("bob", 0, oldest: nil), load("Amy", 0, oldest: nil)]).map(\.id),
+  ["Amy", "bob"])
+check("nothing waiting -> nil urgency", idle.urgency(now: epoch, thresholds: standard) == nil)
+equal(
+  "urgency follows the oldest request", oneOld.urgency(now: epoch, thresholds: standard),
+  .urgent)
+equal(
+  "items are kept oldest first however they arrive",
+  ReviewerLoad(
+    reviewer: profile("x"), requestedCount: 2,
+    items: [
+      item("new", waitingSince: epoch.addingTimeInterval(-60)),
+      item("old", waitingSince: epoch.addingTimeInterval(-3600)),
+    ]
+  ).items.map(\.id), ["old", "new"])
+let roster = TeamRoster(
+  slug: "acme/x", name: "x", memberCount: 2, members: [profile("cat"), profile("zed")],
+  teamRequestedCount: 0)
+equal(
+  "TeamLoad ranks on construction",
+  TeamLoad(roster: roster, members: [busy, idle]).members.map(\.id), ["zed", "cat"])
+equal(
+  "mapItems re-ranks, because the oldest wait is part of the order",
+  LookupResult.team(TeamLoad(roster: roster, members: [oneRecent, oneOld]))
+    .mapItems { $0.id == "amy" ? $0.withWaitingSince(epoch.addingTimeInterval(-9 * 3600)) : $0 },
+  .team(
+    TeamLoad(
+      roster: roster,
+      members: [
+        load("amy", 1, oldest: 9 * 3600), oneOld,
+      ])))
+check(
+  "mapItems leaves not-found alone",
+  LookupResult.notFound(.user(login: "x")).mapItems { $0 } == .notFound(.user(login: "x")))
+
+// MARK: - Lookup decoding
+
+section("Decode lookup fixtures")
+func fixture(_ name: String) throws -> Data {
+  try Data(contentsOf: packageRoot.appendingPathComponent("Fixtures/\(name)"))
+}
+
+do {
+  let result = try GitHubClient.decodeUserLookup(fixture("lookup-user.json"), login: "dev1")
+  if case .user(let load) = result {
+    equal("user login", load.reviewer.login, "dev1")
+    equal("user display name", load.reviewer.name, "Dev One")
+    check("user avatar parsed", load.reviewer.avatarURL != nil)
+    equal("user requested count", load.requestedCount, 3)
+    equal("user items", load.items.count, 3)
+    check(
+      "user items are oldest first",
+      load.items.map(\.waitingSince) == load.items.map(\.waitingSince).sorted())
+    // `user-review-requested:` guarantees a pending request naming dev1, and the clock
+    // is resolved for dev1 rather than for the viewer.
+    check("every item names dev1 directly", load.items.allSatisfy { $0.requestKind == .direct })
+  } else {
+    check("user fixture decodes to .user", false, "got \(result)")
+  }
+} catch {
+  check("user fixture decodes", false, "\(error)")
+}
+
+do {
+  if let roster = try GitHubClient.decodeTeam(fixture("lookup-team.json")) {
+    equal("team slug", roster.slug, "acme/platform-reviewers")
+    equal("team name", roster.name, "platform-reviewers")
+    equal("team member count", roster.memberCount, 5)
+    equal(
+      "team members keep GitHub's order, which the load aliases rely on",
+      roster.members.map(\.login), ["dev2", "dev1", "reviewer-me", "dev4", "dev3"])
+    check("a member without a display name decodes", roster.members[3].name == nil)
+    equal("PRs requested from the team itself", roster.teamRequestedCount, 5)
+
+    let loads = try GitHubClient.decodeLoads(fixture("lookup-team-load.json"), members: roster.members)
+    equal("one load per member", loads.map(\.reviewer.login), roster.members.map(\.login))
+    equal("per-member counts", loads.map(\.requestedCount), [0, 3, 2, 7, 0])
+    check(
+      "every load's items fit its count",
+      loads.allSatisfy { $0.items.count <= $0.requestedCount })
+    check(
+      "a member with nothing waiting has no oldest wait",
+      loads[0].oldestWaitingSince == nil && loads[4].oldestWaitingSince == nil)
+    equal(
+      "the team ranks least loaded first, ties by login",
+      TeamLoad(roster: roster, members: loads).members.map(\.id),
+      ["dev2", "dev3", "reviewer-me", "dev1", "dev4"])
+
+    let tooMany = roster.members + [profile("dev9")]
+    check(
+      "a roster longer than the response is a failure, not a silent zero",
+      {
+        do {
+          _ = try GitHubClient.decodeLoads(fixture("lookup-team-load.json"), members: tooMany)
+          return false
+        } catch let error as GitHubClientError {
+          if case .api = error { return true }
+          return false
+        } catch { return false }
+      }())
+  } else {
+    check("team fixture decodes to a roster", false)
+  }
+} catch {
+  check("team fixture decodes", false, "\(error)")
+}
+
+let threeMembers = GitHubClient.loadQuery(memberCount: 3)
+check(
+  "load query declares one variable per member",
+  threeMembers.contains("query($q0: String!, $q1: String!, $q2: String!)"))
+check(
+  "load query aliases one search per member",
+  threeMembers.contains("m2: search(query: $q2") && !threeMembers.contains("m3:"))
+check("load query carries the shared fragment", threeMembers.contains("fragment PullRequestFields"))
+
+section("Lookup: not found is an answer, not a failure")
+let missingUser = #"""
+  {"data":{"user":null,"search":{"issueCount":0,"nodes":[]}},
+   "errors":[{"type":"NOT_FOUND","path":["user"],
+   "message":"Could not resolve to a User with the login of 'nobody'."}]}
+  """#
+equal(
+  "an unknown user decodes to .notFound",
+  try? GitHubClient.decodeUserLookup(Data(missingUser.utf8), login: "nobody"),
+  .notFound(.user(login: "nobody")))
+let missingOrg = #"""
+  {"data":{"organization":null,"search":{"issueCount":0}},
+   "errors":[{"type":"NOT_FOUND","path":["organization"],
+   "message":"Could not resolve to an Organization with the login of 'nowhere'."}]}
+  """#
+check(
+  "an unknown organization decodes to no roster",
+  (try? GitHubClient.decodeTeam(Data(missingOrg.utf8))) == nil)
+let missingTeam = #"{"data":{"organization":{"team":null},"search":{"issueCount":0}}}"#
+check(
+  "an unknown team in a known organization decodes to no roster",
+  {
+    do { return try GitHubClient.decodeTeam(Data(missingTeam.utf8)) == nil } catch { return false }
+  }())
+func teamDecodeError(_ json: String) -> GitHubClientError? {
+  do {
+    _ = try GitHubClient.decodeTeam(Data(json.utf8))
+    return nil
+  } catch let error as GitHubClientError {
+    return error
+  } catch {
+    return nil
+  }
+}
+equal(
+  "any other GraphQL error is still a failure",
+  teamDecodeError(#"{"data":null,"errors":[{"type":"RATE_LIMITED","message":"slow down"}]}"#),
+  .api("slow down"))
+equal(
+  "NOT_FOUND mixed with another error is a failure",
+  teamDecodeError(
+    #"{"data":null,"errors":[{"type":"NOT_FOUND","message":"a"},{"message":"b"}]}"#),
+  .api("a b"))
 
 // MARK: - Summary
 

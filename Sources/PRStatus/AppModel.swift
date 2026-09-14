@@ -1,11 +1,18 @@
+import Combine
 import Foundation
 import PRStatusCore
+
+/// Which question the popover is answering: what waits on me, or what waits on someone else.
+enum PopoverPane: Hashable {
+  case queue
+  case lookup
+}
 
 @MainActor
 final class AppModel: ObservableObject {
   /// Every PR the fetch returned, before the filter. Kept whole so the filter can change
   /// without a network round trip.
-  @Published private var fetchedState: LoadState = .never
+  @Published private var fetchedState: ReviewQueueState = .never
   /// Hides the PRs that GitHub requested from a team rather than from me by name.
   @Published private(set) var directRequestsOnly: Bool
   /// Distinct from `.loading`: a background refresh while rows are already on screen must
@@ -17,13 +24,18 @@ final class AppModel: ObservableObject {
   /// Populated by `syncLaunchAtLogin` before the popover is shown, so no
   /// ServiceManagement query runs on the launch path.
   @Published private(set) var launchAtLoginEnabled = false
+  @Published private(set) var pane: PopoverPane = .queue
 
   let thresholds: UrgencyThresholds
+  /// Refreshes only while its pane is showing: a team lookup costs a point per member,
+  /// where the queue costs one, and nothing in the menu bar depends on it.
+  let lookup: LookupModel
   /// Injected so the aging behaviour can be driven from a fixture instead of the network;
   /// the real app passes GitHubClient's fetch.
   private let loadItems: () async throws -> [PullRequestItem]
   private var timer: Timer?
   private var lastFetch: Date?
+  private var lookupChanges: AnyCancellable?
 
   /// Fetching is rate-limit friendly at once a minute, but the clock has to be re-read far
   /// more often than that when thresholds are seconds apart (the aging test).
@@ -31,7 +43,7 @@ final class AppModel: ObservableObject {
   private var tickInterval: TimeInterval { max(1, min(15, thresholds.stale / 3)) }
 
   /// The queue as the popover and the menu bar icon both read it.
-  var state: LoadState { fetchedState.showing(directRequestsOnly: directRequestsOnly) }
+  var state: ReviewQueueState { fetchedState.showing(directRequestsOnly: directRequestsOnly) }
 
   var items: [PullRequestItem] { state.items }
 
@@ -45,17 +57,36 @@ final class AppModel: ObservableObject {
   init(
     thresholds: UrgencyThresholds = .fromEnvironment(),
     directRequestsOnly: Bool,
-    loadItems: @escaping () async throws -> [PullRequestItem]
+    loadItems: @escaping () async throws -> [PullRequestItem],
+    lookup: LookupModel
   ) {
     self.thresholds = thresholds
     self.directRequestsOnly = directRequestsOnly
     self.loadItems = loadItems
+    self.lookup = lookup
+    // The popover observes this model alone; forwarding keeps the lookup's changes visible.
+    lookupChanges = lookup.objectWillChange.sink { [weak self] _ in
+      self?.objectWillChange.send()
+    }
   }
 
   func setDirectRequestsOnly(_ enabled: Bool) {
     guard enabled != directRequestsOnly else { return }
-    ReviewFilterPreference.setDirectRequestsOnly(enabled)
+    Preferences.setDirectRequestsOnly(enabled)
     directRequestsOnly = enabled
+  }
+
+  func showPane(_ pane: PopoverPane) {
+    self.pane = pane
+    if pane == .lookup { lookup.refresh() }
+  }
+
+  /// The queue refreshes on every open because the icon depends on it; the lookup only
+  /// when it is the pane about to be seen.
+  func popoverDidOpen() {
+    refresh()
+    syncLaunchAtLogin()
+    if pane == .lookup { lookup.refresh() }
   }
 
   func start() {
@@ -103,14 +134,7 @@ final class AppModel: ObservableObject {
 
     Task { @MainActor in
       defer { isRefreshing = false }
-      let result: Result<[PullRequestItem], GitHubClientError>
-      do {
-        result = .success(try await loadItems())
-      } catch let error as GitHubClientError {
-        result = .failure(error)
-      } catch {
-        result = .failure(.network(error.localizedDescription))
-      }
+      let result = await outcome { try await loadItems() }
       let completedAt = Date()
       lastFetch = completedAt
       now = completedAt

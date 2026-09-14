@@ -11,17 +11,8 @@ enum RenderProbe {
     let directory = URL(fileURLWithPath: outputDirectory)
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-    let fixture = URL(fileURLWithPath: "Fixtures/response.json")
-    let decoded = (try? GitHubClient.decode(Data(contentsOf: fixture)).items) ?? []
-    // The fixture's timestamps are fixed, so with real time they all read as urgent. Ages
-    // are spread across the thresholds here so a documentation shot shows every colour.
-    let spread: [TimeInterval] = [
-      12 * 60, 40 * 60, 75 * 60, 150 * 60, 4 * 3600, 3 * 86400 + 4 * 3600,
-    ]
-    let now = Date()
-    let fixtureItems = decoded.enumerated().map { index, item in
-      item.withWaitingSince(now.addingTimeInterval(-spread[index % spread.count]))
-    }
+    let fixtures = FixtureStore(queueResponse: URL(fileURLWithPath: "Fixtures/response.json"))
+    let fixtureItems = spreadAges((try? fixtures.queueItems()) ?? [])
 
     for appearance in [NSAppearance.Name.aqua, .darkAqua] {
       let suffix = appearance == .aqua ? "light" : "dark"
@@ -51,6 +42,27 @@ enum RenderProbe {
         model: settled(directRequestsOnly: true) {
           fixtureItems.filter { $0.requestKind == .team }
         }, appearance, directory)
+
+      render(
+        "11-lookup-prompt-\(suffix)", model: lookedUp("", items: fixtureItems), appearance,
+        directory)
+      render(
+        "12-lookup-user-\(suffix)",
+        model: lookedUp("dev1", items: fixtureItems) { target in
+          try fixtures.lookup(target).spreadingAges()
+        }, appearance, directory)
+      render(
+        "13-lookup-team-\(suffix)",
+        model: lookedUp("acme/platform-reviewers", items: fixtureItems) { target in
+          try fixtures.lookup(target).spreadingAges()
+        }, appearance, directory)
+      render(
+        "14-lookup-not-found-\(suffix)",
+        model: lookedUp("acme/nobody", items: fixtureItems) { .notFound($0) }, appearance,
+        directory)
+      render(
+        "15-lookup-unreadable-\(suffix)", model: lookedUp("two words", items: fixtureItems),
+        appearance, directory)
     }
   }
 
@@ -59,11 +71,26 @@ enum RenderProbe {
     return []
   }
 
+  /// The fixtures' timestamps are fixed, so with real time every row reads as urgent. Ages
+  /// are spread across the thresholds so a documentation shot shows every colour.
+  private static func spreadAges(_ items: [PullRequestItem]) -> [PullRequestItem] {
+    let spread: [TimeInterval] = [
+      12 * 60, 40 * 60, 75 * 60, 150 * 60, 4 * 3600, 3 * 86400 + 4 * 3600,
+    ]
+    let now = Date()
+    return items.enumerated().map { index, item in
+      item.withWaitingSince(now.addingTimeInterval(-spread[index % spread.count]))
+    }.oldestFirst()
+  }
+
   private static func model(
     directRequestsOnly: Bool,
+    lookup: LookupModel = LookupModel(text: "") { _ in throw GitHubClientError.ghNotFound },
     _ load: @escaping () async throws -> [PullRequestItem]
   ) -> AppModel {
-    AppModel(thresholds: .standard, directRequestsOnly: directRequestsOnly, loadItems: load)
+    AppModel(
+      thresholds: .standard, directRequestsOnly: directRequestsOnly, loadItems: load,
+      lookup: lookup)
   }
 
   /// Waits on the model reaching a terminal state rather than on a fixed delay, so a slow
@@ -76,6 +103,29 @@ enum RenderProbe {
     model.refresh()
     guard runLoop(until: { model.state != .loading }) else {
       fatalError("model never left .loading; refusing to render a spinner")
+    }
+    return model
+  }
+
+  /// The lookup pane showing `text`, answered by `perform` when the text names something.
+  private static func lookedUp(
+    _ text: String,
+    items: [PullRequestItem],
+    perform: @escaping (LookupTarget) throws -> LookupResult = { _ in
+      fatalError("the fixture text names nothing; the lookup must not run")
+    }
+  ) -> AppModel {
+    let lookup = LookupModel(text: text) { try perform($0) }
+    let model = model(directRequestsOnly: false, lookup: lookup) { items }
+    model.refresh()
+    model.showPane(.lookup)
+    let expectsAnswer = lookup.target != nil
+    guard
+      runLoop(until: {
+        model.state != .loading && (!expectsAnswer || lookup.state != .loading)
+      })
+    else {
+      fatalError("lookup never left .loading; refusing to render a spinner")
     }
     return model
   }
@@ -149,5 +199,19 @@ enum RenderProbe {
     let url = directory.appendingPathComponent("\(name).png")
     try? png.write(to: url)
     print("render \(name): \(Int(bounds.width))x\(Int(bounds.height)) -> \(url.path)")
+  }
+}
+
+extension LookupResult {
+  /// Every person's PRs walk the same age spread the queue does, so the team rows show
+  /// each colour rather than all reading as urgent.
+  fileprivate func spreadingAges() -> LookupResult {
+    let spread: [TimeInterval] = [30 * 60, 2 * 3600 + 20 * 60, 26 * 3600, 5 * 60, 4 * 3600]
+    let now = Date()
+    var index = 0
+    return mapItems { item in
+      defer { index += 1 }
+      return item.withWaitingSince(now.addingTimeInterval(-spread[index % spread.count]))
+    }
   }
 }

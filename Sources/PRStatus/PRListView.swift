@@ -20,26 +20,47 @@ struct PRListView: View {
 
   // MARK: - Header
 
+  private var queueTitle: String {
+    model.items.isEmpty ? "Your queue" : "Your queue · \(model.items.count)"
+  }
+
+  private var isRefreshing: Bool {
+    switch model.pane {
+    case .queue: return model.isRefreshing
+    case .lookup: return model.lookup.isRefreshing
+    }
+  }
+
+  private func refresh() {
+    switch model.pane {
+    case .queue: model.refresh()
+    case .lookup: model.lookup.refresh()
+    }
+  }
+
   private var header: some View {
     HStack(spacing: 8) {
-      Text("Waiting on your review")
-        .font(.system(size: 13, weight: .semibold))
-      if !model.items.isEmpty {
-        Text("\(model.items.count)")
-          .font(.system(size: 11, weight: .semibold))
-          .foregroundStyle(.secondary)
-          .padding(.horizontal, 6)
-          .padding(.vertical, 1)
-          .background(Color.secondary.opacity(0.15), in: Capsule())
+      Picker(
+        "Pane",
+        selection: Binding(
+          get: { model.pane },
+          set: { model.showPane($0) })
+      ) {
+        Text(queueTitle).tag(PopoverPane.queue)
+        Text("Look up").tag(PopoverPane.lookup)
       }
+      .pickerStyle(.segmented)
+      .labelsHidden()
+      .controlSize(.small)
+      .fixedSize()
       Spacer()
-      if model.isRefreshing {
+      if isRefreshing {
         ProgressView()
           .controlSize(.small)
           .scaleEffect(0.7)
           .frame(width: 14, height: 14)
       } else {
-        Button(action: model.refresh) {
+        Button(action: refresh) {
           Image(systemName: "arrow.clockwise")
             .font(.system(size: 11, weight: .semibold))
         }
@@ -49,46 +70,42 @@ struct PRListView: View {
       }
     }
     .padding(.horizontal, 14)
-    .padding(.vertical, 10)
+    .padding(.vertical, 8)
   }
 
   // MARK: - Content
 
   @ViewBuilder
   private var content: some View {
+    switch model.pane {
+    case .queue:
+      queue
+    case .lookup:
+      LookupView(
+        model: model.lookup, now: model.now, thresholds: model.thresholds, onOpen: onOpen)
+    }
+  }
+
+  @ViewBuilder
+  private var queue: some View {
     switch model.state {
     case .never, .loading:
-      centered {
-        ProgressView().controlSize(.small)
-        Text("Checking GitHub…")
-          .font(.system(size: 12))
-          .foregroundStyle(.secondary)
-      }
+      LoadingView()
     case .failed(let error):
-      errorView(error)
+      ErrorView(error: error, retry: model.refresh)
     case .loaded(let items, let at, let refreshError):
       // The banner wraps both bodies: a queue known to be empty is knowledge worth
       // keeping when a refresh fails, and it needs the same "this is not current" mark.
       VStack(spacing: 0) {
         if let refreshError {
-          staleBanner(refreshError, since: at)
+          StaleBanner(error: refreshError, since: at, retry: model.refresh)
         }
-        if items.isEmpty { emptyState } else { list }
+        if items.isEmpty {
+          Notice(symbol: "checkmark.circle", title: "Nothing waiting on you", detail: emptyDetail)
+        } else {
+          PRList(items: items, now: model.now, thresholds: model.thresholds, onOpen: onOpen)
+        }
       }
-    }
-  }
-
-  private var emptyState: some View {
-    centered {
-      Image(systemName: "checkmark.circle")
-        .font(.system(size: 22, weight: .light))
-        .foregroundStyle(.secondary)
-      Text("Nothing waiting on you")
-        .font(.system(size: 12, weight: .medium))
-      Text(emptyDetail)
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
     }
   }
 
@@ -102,74 +119,16 @@ struct PRListView: View {
     }
   }
 
-  /// Rows are still worth showing when a refresh fails; the banner says so rather than
-  /// letting them pass for current.
-  private func staleBanner(_ error: GitHubClientError, since: Date) -> some View {
-    HStack(spacing: 6) {
-      Image(systemName: "exclamationmark.circle")
-        .font(.system(size: 10, weight: .semibold))
-      Text(
-        "\(error.title) — showing \(formatAsOfTime(since))"
-      )
-      .font(.system(size: 10))
-      Spacer(minLength: 0)
-      Button("Retry", action: model.refresh)
-        .buttonStyle(.plain)
-        .font(.system(size: 10, weight: .medium))
-    }
-    .foregroundStyle(.secondary)
-    .padding(.horizontal, 14)
-    .padding(.vertical, 5)
-    .background(Color.orange.opacity(0.12))
-  }
-
-  private var list: some View {
-    ScrollView {
-      VStack(spacing: 0) {
-        ForEach(model.items) { item in
-          PRRow(item: item, now: model.now, thresholds: model.thresholds) {
-            onOpen(item.url)
-          }
-          if item.id != model.items.last?.id {
-            Divider().padding(.leading, 14)
-          }
-        }
-      }
-    }
-    // Caps the popover so a long queue scrolls instead of growing off screen.
-    .frame(maxHeight: 420)
-  }
-
-  private func errorView(_ error: GitHubClientError) -> some View {
-    centered {
-      Image(systemName: "exclamationmark.triangle")
-        .font(.system(size: 20, weight: .light))
-        .foregroundStyle(.orange)
-      Text(error.title)
-        .font(.system(size: 12, weight: .medium))
-      Text(error.hint)
-        .font(.system(size: 11))
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .fixedSize(horizontal: false, vertical: true)
-      Button("Try Again", action: model.refresh)
-        .controlSize(.small)
-        .padding(.top, 2)
-    }
-  }
-
-  private func centered<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-    VStack(spacing: 6) {
-      Spacer(minLength: 0)
-      content()
-      Spacer(minLength: 0)
-    }
-    .frame(maxWidth: .infinity, minHeight: 132)
-    .padding(.horizontal, 24)
-    .padding(.vertical, 12)
-  }
-
   // MARK: - Footer
+
+  /// The visible pane's fetch time. Suppressed while stale: the banner already states the
+  /// same time, and two timestamps saying different things is worse than one.
+  private var updatedAt: Date? {
+    switch model.pane {
+    case .queue: return model.state.currentAsOf
+    case .lookup: return model.lookup.state.currentAsOf
+    }
+  }
 
   private var footer: some View {
     HStack(spacing: 10) {
@@ -193,10 +152,8 @@ struct PRListView: View {
         "Show only the PRs that request your review by name. This hides the PRs that "
           + "GitHub requested from a team you belong to.")
       Spacer()
-      // Suppressed while stale: the banner already states the same time, and two
-      // timestamps saying different things is worse than one.
-      if case .loaded(_, let at, .none) = model.state {
-        Text("Updated \(formatAsOfTime(at))")
+      if let updatedAt {
+        Text("Updated \(formatAsOfTime(updatedAt))")
           .font(.system(size: 10))
           .foregroundStyle(.tertiary)
       }
@@ -207,109 +164,5 @@ struct PRListView: View {
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 8)
-  }
-}
-
-// MARK: - Row
-
-private struct PRRow: View {
-  let item: PullRequestItem
-  let now: Date
-  let thresholds: UrgencyThresholds
-  let onTap: () -> Void
-
-  @State private var isHovering = false
-
-  private var urgency: Urgency { item.urgency(now: now, thresholds: thresholds) }
-
-  var body: some View {
-    Button(action: onTap) {
-      HStack(alignment: .top, spacing: 9) {
-        Circle()
-          .fill(Color(StatusIcon.color(for: urgency)))
-          .frame(width: 7, height: 7)
-          .padding(.top, 4)
-
-        VStack(alignment: .leading, spacing: 3) {
-          HStack(alignment: .firstTextBaseline, spacing: 5) {
-            Text(item.title)
-              .font(.system(size: 12, weight: .medium))
-              .lineLimit(2)
-              .multilineTextAlignment(.leading)
-              .fixedSize(horizontal: false, vertical: true)
-            if item.isDraft {
-              Text("DRAFT")
-                .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(Color.secondary.opacity(0.15), in: RoundedRectangle(cornerRadius: 3))
-            }
-          }
-
-          HStack(spacing: 4) {
-            Text(item.reference)
-              .lineLimit(1)
-              .truncationMode(.middle)
-            Text("·")
-            Text(item.authorLogin).lineLimit(1)
-            Text("·")
-            Text(formatWaitingDuration(item.age(now: now)))
-              .foregroundStyle(Color(StatusIcon.color(for: urgency)))
-              .fontWeight(.medium)
-          }
-          .font(.system(size: 10))
-          .foregroundStyle(.secondary)
-
-          HStack(spacing: 5) {
-            Text("+\(item.additions)").foregroundStyle(.green)
-            Text("−\(item.deletions)").foregroundStyle(.red)
-            Text(item.changedFiles == 1 ? "1 file" : "\(item.changedFiles) files")
-              .foregroundStyle(.tertiary)
-          }
-          .font(.system(size: 10, design: .monospaced))
-        }
-
-        Spacer(minLength: 0)
-
-        Avatar(url: item.authorAvatarURL)
-          .padding(.top, 1)
-      }
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(isHovering ? Color.primary.opacity(0.07) : Color.clear)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .onHover { isHovering = $0 }
-    .help("Open \(item.reference) in your browser")
-  }
-}
-
-private struct Avatar: View {
-  let url: URL?
-
-  var body: some View {
-    ZStack {
-      Circle().fill(Color.secondary.opacity(0.18))
-      if let url {
-        AsyncImage(url: url) { phase in
-          if let image = phase.image {
-            image.resizable().scaledToFill()
-          } else {
-            Image(systemName: "person.fill")
-              .font(.system(size: 8))
-              .foregroundStyle(.secondary)
-          }
-        }
-      } else {
-        Image(systemName: "person.fill")
-          .font(.system(size: 8))
-          .foregroundStyle(.secondary)
-      }
-    }
-    .frame(width: 18, height: 18)
-    .clipShape(Circle())
   }
 }

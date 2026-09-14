@@ -7,6 +7,10 @@ if ProcessInfo.processInfo.environment["PRSTATUS_LOGIN_PROBE"] == "1" {
   exit(0)
 }
 
+if let name = ProcessInfo.processInfo.environment["PRSTATUS_LOOKUP_PROBE"] {
+  exit(LookupProbe.run(name))
+}
+
 if let renderDirectory = ProcessInfo.processInfo.environment["PRSTATUS_RENDER"] {
   // NSApplication has to exist before SwiftUI will render, but the app never runs.
   _ = NSApplication.shared

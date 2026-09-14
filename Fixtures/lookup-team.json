@@ -1,0 +1,43 @@
+{
+  "data": {
+    "organization": {
+      "team": {
+        "name": "platform-reviewers",
+        "combinedSlug": "acme/platform-reviewers",
+        "members": {
+          "totalCount": 5,
+          "nodes": [
+            {
+              "login": "dev2",
+              "name": "Dev Two",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+            },
+            {
+              "login": "dev1",
+              "name": "Dev One",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+            },
+            {
+              "login": "reviewer-me",
+              "name": "Reviewer Me",
+              "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+            },
+            {
+              "login": "dev4",
+              "name": null,
+              "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+            },
+            {
+              "login": "dev3",
+              "name": null,
+              "avatarUrl": "https://avatars.githubusercontent.com/u/0?v=4"
+            }
+          ]
+        }
+      }
+    },
+    "search": {
+      "issueCount": 5
+    }
+  }
+}
